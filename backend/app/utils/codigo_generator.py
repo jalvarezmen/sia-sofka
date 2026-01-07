@@ -40,3 +40,4 @@ async def generar_codigo_institucional(
     
     return f"{prefix}-{current_year}-{sequential}"
 
+

@@ -66,3 +66,4 @@ class UserRepository(AbstractRepository[User]):
         result = await self.db.execute(stmt)
         return list(result.scalars().all())
 
+

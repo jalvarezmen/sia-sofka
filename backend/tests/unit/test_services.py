@@ -498,3 +498,4 @@ async def test_grade_service_calculate_average(db_session: AsyncSession):
     # Average should be (4.0 + 4.5 + 5.0) / 3 = 4.5
     assert average == Decimal("4.5")
 
+

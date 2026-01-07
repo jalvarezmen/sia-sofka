@@ -137,3 +137,4 @@ class PDFReportGenerator(ReportGenerator):
             "content_type": "application/pdf",
         }
 
+

@@ -209,3 +209,4 @@ class HTMLReportGenerator(ReportGenerator):
             "content_type": "text/html",
         }
 
+

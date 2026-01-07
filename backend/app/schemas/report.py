@@ -20,3 +20,4 @@ class ReportResponse(BaseModel):
             bytes: lambda v: v.decode("latin-1") if isinstance(v, bytes) else v
         }
 
+

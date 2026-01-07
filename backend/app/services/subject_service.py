@@ -122,3 +122,4 @@ class SubjectService:
         """
         return await self.repository.get_by_profesor(profesor_id, skip, limit)
 
+

@@ -21,3 +21,4 @@ class EnrollmentResponse(EnrollmentBase):
     class Config:
         from_attributes = True
 
+

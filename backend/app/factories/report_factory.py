@@ -61,3 +61,4 @@ class ReportFactory:
         
         return generator_class()
 
+

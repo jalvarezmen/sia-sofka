@@ -47,3 +47,4 @@ class JSONReportGenerator(ReportGenerator):
             "content_type": "application/json",
         }
 
+

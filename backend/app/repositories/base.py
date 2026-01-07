@@ -97,3 +97,4 @@ class AbstractRepository(Generic[ModelType]):
         await self.db.commit()
         return result.rowcount > 0
 
+

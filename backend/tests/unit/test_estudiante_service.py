@@ -328,3 +328,4 @@ async def test_estudiante_service_update_profile(db_session: AsyncSession):
     assert updated.ciudad_residencia == "Medellín"
     assert updated.numero_contacto == "0987654321"
 
+

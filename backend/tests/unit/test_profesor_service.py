@@ -297,3 +297,4 @@ async def test_profesor_service_update_profile(db_session: AsyncSession):
     assert updated.area_ensenanza == "Física"
     assert updated.numero_contacto == "0987654321"
 
+

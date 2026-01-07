@@ -90,3 +90,4 @@ backend/
 ├── tests/             # Pruebas
 └── alembic/           # Migraciones
 
+

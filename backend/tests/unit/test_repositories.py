@@ -293,3 +293,4 @@ async def test_grade_repository_create(db_session: AsyncSession):
     assert grade.nota == 4.5
     assert grade.periodo == "2024-1"
 
+

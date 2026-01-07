@@ -81,3 +81,4 @@ def decode_access_token(token: str) -> Dict[str, Any]:
     except JWTError:
         raise JWTError("Could not validate credentials")
 
+

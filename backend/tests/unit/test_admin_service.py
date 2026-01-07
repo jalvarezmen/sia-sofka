@@ -298,3 +298,4 @@ async def test_admin_service_get_all_profesores(db_session: AsyncSession):
     assert len(profesores) == 2
     assert all(prof.role == UserRole.PROFESOR for prof in profesores)
 
+

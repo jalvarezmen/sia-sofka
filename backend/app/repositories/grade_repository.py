@@ -56,3 +56,4 @@ class GradeRepository(AbstractRepository[Grade]):
         avg = result.scalar()
         return float(avg) if avg is not None else None
 
+

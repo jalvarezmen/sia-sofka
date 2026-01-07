@@ -151,3 +151,4 @@ def test_all_generators_same_interface():
     assert "filename" in json_result
     assert "content_type" in json_result
 
+

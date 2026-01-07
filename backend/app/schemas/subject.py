@@ -36,3 +36,4 @@ class SubjectResponse(SubjectBase):
     class Config:
         from_attributes = True
 
+
