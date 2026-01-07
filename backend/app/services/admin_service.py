@@ -3,6 +3,7 @@
 from decimal import Decimal
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.user import User, UserRole
+from app.models.subject import Subject
 from app.services.user_service import UserService
 from app.services.subject_service import SubjectService
 from app.services.grade_service import GradeService

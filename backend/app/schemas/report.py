@@ -1,6 +1,6 @@
 """Report schemas."""
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from typing import Optional, List, Dict, Any
 
 
@@ -15,9 +15,10 @@ class ReportResponse(BaseModel):
     filename: str
     content_type: str
     
-    class Config:
-        json_encoders = {
+    model_config = ConfigDict(
+        json_encoders={
             bytes: lambda v: v.decode("latin-1") if isinstance(v, bytes) else v
         }
+    )
 
 

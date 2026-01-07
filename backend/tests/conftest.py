@@ -38,16 +38,17 @@ async def db_session():
 
 
 @pytest.fixture
-def client(db_session):
+async def client(db_session):
     """Create a test client."""
-    from fastapi.testclient import TestClient
+    from httpx import AsyncClient
+    from app.core.database import get_db
     
-    def override_get_db():
+    async def override_get_db():
         yield db_session
     
     app.dependency_overrides[get_db] = override_get_db
     
-    with TestClient(app) as test_client:
+    async with AsyncClient(app=app, base_url="http://test") as test_client:
         yield test_client
     
     app.dependency_overrides.clear()

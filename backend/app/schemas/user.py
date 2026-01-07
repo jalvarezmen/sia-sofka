@@ -1,7 +1,7 @@
 """User schemas."""
 
-from pydantic import BaseModel, EmailStr, Field
-from datetime import date
+from pydantic import BaseModel, EmailStr, Field, ConfigDict
+from datetime import date, datetime
 from typing import Optional
 from app.models.user import UserRole
 
@@ -44,9 +44,8 @@ class UserResponse(UserBase):
     programa_academico: Optional[str] = None
     ciudad_residencia: Optional[str] = None
     area_ensenanza: Optional[str] = None
-    created_at: str
-    updated_at: str
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
     
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 

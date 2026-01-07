@@ -144,7 +144,7 @@ async def test_estudiante_service_get_all_enrollments(db_session: AsyncSession):
     enrollments = await service.get_all_enrollments()
     
     assert len(enrollments) == 3
-    assert all(enroll.estudiante_id == estudiante.id for enroll in enrollments)
+    assert all(enroll["enrollment"].estudiante_id == estudiante.id for enroll in enrollments)
 
 
 @pytest.mark.asyncio

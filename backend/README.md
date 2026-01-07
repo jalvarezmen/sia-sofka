@@ -1,9 +1,9 @@
 # SIA SOFKA U - Backend
 
 [![CI Pipeline](https://github.com/YOUR_USERNAME/sia-sofka/actions/workflows/ci.yml/badge.svg)](https://github.com/YOUR_USERNAME/sia-sofka/actions/workflows/ci.yml)
-[![codecov](https://codecov.io/gh/YOUR_USERNAME/sia-sofka/branch/main/graph/badge.svg)](https://codecov.io/gh/YOUR_USERNAME/sia-sofka)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
+[![Coverage](https://img.shields.io/badge/coverage-80%25+-green.svg)](https://github.com/YOUR_USERNAME/sia-sofka)
 
 Sistema de Información Académica SOFKA U - Backend API
 

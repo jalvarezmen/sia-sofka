@@ -317,9 +317,15 @@ async def test_user_subject_relationship(db_session: AsyncSession):
     db_session.add_all([subject1, subject2])
     await db_session.commit()
     
-    # Test relationship
-    await db_session.refresh(profesor)
-    assert len(profesor.subjects) == 2
+    # Test relationship - need to load relationship explicitly in async
+    from sqlalchemy.orm import selectinload
+    from sqlalchemy import select
+    
+    result = await db_session.execute(
+        select(User).options(selectinload(User.subjects)).where(User.id == profesor.id)
+    )
+    profesor_loaded = result.scalar_one()
+    assert len(profesor_loaded.subjects) == 2
 
 
 @pytest.mark.asyncio

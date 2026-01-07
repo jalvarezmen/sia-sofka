@@ -1,6 +1,6 @@
 """Enrollment schemas."""
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class EnrollmentBase(BaseModel):
@@ -18,7 +18,6 @@ class EnrollmentResponse(EnrollmentBase):
     """Schema for enrollment response."""
     id: int
     
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 

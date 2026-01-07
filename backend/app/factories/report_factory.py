@@ -2,10 +2,12 @@
 
 from abc import ABC, abstractmethod
 from enum import Enum
-from typing import Dict, Any
-from app.factories.pdf_generator import PDFReportGenerator
-from app.factories.html_generator import HTMLReportGenerator
-from app.factories.json_generator import JSONReportGenerator
+from typing import Dict, Any, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from app.factories.pdf_generator import PDFReportGenerator
+    from app.factories.html_generator import HTMLReportGenerator
+    from app.factories.json_generator import JSONReportGenerator
 
 
 class ReportFormat(str, Enum):
@@ -35,7 +37,7 @@ class ReportFactory:
     """Factory for creating report generators."""
     
     @staticmethod
-    def create_generator(format: str | ReportFormat) -> ReportGenerator:
+    def create_generator(format: str | ReportFormat) -> "ReportGenerator":
         """Create a report generator based on format.
         
         Args:
@@ -47,6 +49,11 @@ class ReportFactory:
         Raises:
             ValueError: If format is not supported
         """
+        # Import here to avoid circular imports
+        from app.factories.pdf_generator import PDFReportGenerator
+        from app.factories.html_generator import HTMLReportGenerator
+        from app.factories.json_generator import JSONReportGenerator
+        
         format_str = format.value if isinstance(format, ReportFormat) else format.lower()
         
         generators = {

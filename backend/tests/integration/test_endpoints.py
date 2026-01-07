@@ -28,12 +28,13 @@ async def test_create_user_as_admin(client, db_session: AsyncSession):
     )
     db_session.add(admin)
     await db_session.commit()
+    await db_session.refresh(admin)
     
     # Login as admin
     token = create_access_token({"sub": admin.email, "role": admin.role.value})
     
     # Create estudiante
-    response = client.post(
+    response = await client.post(
         "/api/v1/users",
         json={
             "email": "newest@example.com",
@@ -69,10 +70,11 @@ async def test_create_user_unauthorized(client, db_session: AsyncSession):
     )
     db_session.add(estudiante)
     await db_session.commit()
+    await db_session.refresh(estudiante)
     
     token = create_access_token({"sub": estudiante.email, "role": estudiante.role.value})
     
-    response = client.post(
+    response = await client.post(
         "/api/v1/users",
         json={
             "email": "new@example.com",
@@ -103,10 +105,11 @@ async def test_get_users_as_admin(client, db_session: AsyncSession):
     )
     db_session.add(admin)
     await db_session.commit()
+    await db_session.refresh(admin)
     
     token = create_access_token({"sub": admin.email, "role": admin.role.value})
     
-    response = client.get(
+    response = await client.get(
         "/api/v1/users",
         headers={"Authorization": f"Bearer {token}"},
     )
@@ -146,7 +149,7 @@ async def test_create_subject_as_admin(client, db_session: AsyncSession):
     
     token = create_access_token({"sub": admin.email, "role": admin.role.value})
     
-    response = client.post(
+    response = await client.post(
         "/api/v1/subjects",
         json={
             "nombre": "Nueva Materia",
@@ -218,7 +221,7 @@ async def test_create_enrollment_as_admin(client, db_session: AsyncSession):
     
     token = create_access_token({"sub": admin.email, "role": admin.role.value})
     
-    response = client.post(
+    response = await client.post(
         "/api/v1/enrollments",
         json={
             "estudiante_id": estudiante.id,
@@ -263,6 +266,8 @@ async def test_create_grade_as_profesor(client, db_session: AsyncSession):
     await db_session.refresh(profesor)
     await db_session.refresh(estudiante)
     
+    token = create_access_token({"sub": profesor.email, "role": profesor.role.value})
+    
     subject = Subject(
         nombre="Matemáticas",
         codigo_institucional="MAT-101",
@@ -282,9 +287,7 @@ async def test_create_grade_as_profesor(client, db_session: AsyncSession):
     await db_session.commit()
     await db_session.refresh(enrollment)
     
-    token = create_access_token({"sub": profesor.email, "role": profesor.role.value})
-    
-    response = client.post(
+    response = await client.post(
         f"/api/v1/grades?subject_id={subject.id}",
         json={
             "enrollment_id": enrollment.id,
@@ -297,7 +300,8 @@ async def test_create_grade_as_profesor(client, db_session: AsyncSession):
     
     assert response.status_code == 201
     data = response.json()
-    assert data["nota"] == 4.5
+    # Decimal is serialized as string in JSON
+    assert float(data["nota"]) == 4.5
 
 
 @pytest.mark.asyncio
@@ -357,10 +361,11 @@ async def test_get_grades_as_estudiante(client, db_session: AsyncSession):
     )
     db_session.add(grade)
     await db_session.commit()
+    await db_session.refresh(estudiante)
     
     token = create_access_token({"sub": estudiante.email, "role": estudiante.role.value})
     
-    response = client.get(
+    response = await client.get(
         f"/api/v1/grades?subject_id={subject.id}",
         headers={"Authorization": f"Bearer {token}"},
     )
@@ -401,7 +406,7 @@ async def test_generate_report_as_admin(client, db_session: AsyncSession):
     
     token = create_access_token({"sub": admin.email, "role": admin.role.value})
     
-    response = client.get(
+    response = await client.get(
         f"/api/v1/reports/student/{estudiante.id}?format=json",
         headers={"Authorization": f"Bearer {token}"},
     )
@@ -428,10 +433,11 @@ async def test_update_profile(client, db_session: AsyncSession):
     )
     db_session.add(estudiante)
     await db_session.commit()
+    await db_session.refresh(estudiante)
     
     token = create_access_token({"sub": estudiante.email, "role": estudiante.role.value})
     
-    response = client.put(
+    response = await client.put(
         "/api/v1/profile",
         json={
             "nombre": "Updated",

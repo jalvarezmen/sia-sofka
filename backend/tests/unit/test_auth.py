@@ -24,9 +24,10 @@ async def test_register_user_success(client, db_session: AsyncSession):
     )
     db_session.add(admin)
     await db_session.commit()
+    await db_session.refresh(admin)
     
     # Login as admin
-    login_response = client.post(
+    login_response = await client.post(
         "/api/v1/auth/login",
         data={"username": "admin@example.com", "password": "admin123"},
     )
@@ -34,7 +35,7 @@ async def test_register_user_success(client, db_session: AsyncSession):
     admin_token = login_response.json()["access_token"]
     
     # Register new user
-    response = client.post(
+    response = await client.post(
         "/api/v1/auth/register",
         json={
             "email": "newuser@example.com",
@@ -71,9 +72,10 @@ async def test_register_user_unauthorized(client, db_session: AsyncSession):
     )
     db_session.add(estudiante)
     await db_session.commit()
+    await db_session.refresh(estudiante)
     
     # Login as estudiante
-    login_response = client.post(
+    login_response = await client.post(
         "/api/v1/auth/login",
         data={"username": "estudiante@example.com", "password": "est123"},
     )
@@ -81,7 +83,7 @@ async def test_register_user_unauthorized(client, db_session: AsyncSession):
     token = login_response.json()["access_token"]
     
     # Try to register (should fail)
-    response = client.post(
+    response = await client.post(
         "/api/v1/auth/register",
         json={
             "email": "newuser@example.com",
@@ -114,7 +116,7 @@ async def test_login_success(client, db_session: AsyncSession):
     db_session.add(user)
     await db_session.commit()
     
-    response = client.post(
+    response = await client.post(
         "/api/v1/auth/login",
         data={"username": "test@example.com", "password": password},
     )
@@ -128,7 +130,7 @@ async def test_login_success(client, db_session: AsyncSession):
 @pytest.mark.asyncio
 async def test_login_invalid_credentials(client, db_session: AsyncSession):
     """Test login with invalid credentials."""
-    response = client.post(
+    response = await client.post(
         "/api/v1/auth/login",
         data={"username": "nonexistent@example.com", "password": "wrong"},
     )
@@ -153,16 +155,17 @@ async def test_get_current_user(client, db_session: AsyncSession):
     )
     db_session.add(user)
     await db_session.commit()
+    await db_session.refresh(user)
     
     # Login
-    login_response = client.post(
+    login_response = await client.post(
         "/api/v1/auth/login",
         data={"username": "profesor@example.com", "password": password},
     )
     token = login_response.json()["access_token"]
     
     # Get current user
-    response = client.get(
+    response = await client.get(
         "/api/v1/auth/me",
         headers={"Authorization": f"Bearer {token}"},
     )
@@ -177,7 +180,7 @@ async def test_get_current_user(client, db_session: AsyncSession):
 @pytest.mark.asyncio
 async def test_get_current_user_invalid_token(client):
     """Test getting current user with invalid token."""
-    response = client.get(
+    response = await client.get(
         "/api/v1/auth/me",
         headers={"Authorization": "Bearer invalid_token"},
     )
