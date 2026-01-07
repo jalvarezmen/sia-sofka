@@ -179,25 +179,28 @@ class AdminService:
         # Calculate average
         return await self.grade_service.calculate_average(enrollment.id)
     
-    # Report Generation (will use Factory Method in next stage)
+    # Report Generation using Factory Method
     async def generate_student_report(
         self, estudiante_id: int, format: str = "json"
     ) -> dict:
-        """Generate report for a student (placeholder for Factory Method).
+        """Generate report for a student using Factory Method.
         
         Args:
             estudiante_id: Estudiante user ID
             format: Report format (pdf, html, json)
         
         Returns:
-            Report data (will be implemented with Factory Method)
+            Report with content, filename, and content_type
         """
-        # This will be fully implemented in Etapa 6 with Factory Method
+        from app.factories.report_factory import ReportFactory
+        from app.repositories.subject_repository import SubjectRepository
+        
         estudiante = await self.user_service.get_user_by_id(estudiante_id)
         if not estudiante:
             raise ValueError("Estudiante not found")
         
         enrollments = await self.enrollment_repo.get_by_estudiante(estudiante_id)
+        subject_repo = SubjectRepository(self.db)
         
         report_data = {
             "estudiante": {
@@ -205,25 +208,35 @@ class AdminService:
                 "nombre": estudiante.nombre,
                 "apellido": estudiante.apellido,
                 "codigo_institucional": estudiante.codigo_institucional,
+                "programa_academico": estudiante.programa_academico,
             },
-            "enrollments": [],
-            "format": format,
+            "subjects": [],
         }
         
         # Add enrollment and grade data
         for enrollment in enrollments:
+            subject = await subject_repo.get_by_id(enrollment.subject_id)
+            if not subject:
+                continue
+            
             grades = await self.grade_service.get_grades_by_enrollment(enrollment.id)
             try:
                 average = await self.grade_service.calculate_average(enrollment.id)
             except ValueError:
                 average = None
             
-            report_data["enrollments"].append({
-                "enrollment_id": enrollment.id,
-                "subject_id": enrollment.subject_id,
-                "grades": [{"nota": float(g.nota), "periodo": g.periodo} for g in grades],
+            report_data["subjects"].append({
+                "subject": {
+                    "id": subject.id,
+                    "nombre": subject.nombre,
+                    "codigo_institucional": subject.codigo_institucional,
+                    "numero_creditos": subject.numero_creditos,
+                },
+                "grades": [{"nota": float(g.nota), "periodo": g.periodo, "fecha": str(g.fecha)} for g in grades],
                 "average": float(average) if average else None,
             })
         
-        return report_data
+        # Use Factory Method to generate report
+        generator = ReportFactory.create_generator(format)
+        return generator.generate(report_data)
 

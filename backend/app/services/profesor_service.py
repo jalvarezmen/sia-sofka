@@ -121,15 +121,17 @@ class ProfesorService:
     async def generate_subject_report(
         self, subject_id: int, format: str = "pdf"
     ) -> dict:
-        """Generate report of grades for a subject (placeholder for Factory Method).
+        """Generate report of grades for a subject using Factory Method.
         
         Args:
             subject_id: Subject ID
             format: Report format (pdf, html, json)
         
         Returns:
-            Report data (will be implemented with Factory Method)
+            Report with content, filename, and content_type
         """
+        from app.factories.report_factory import ReportFactory
+        
         # Verify subject is assigned
         subject = await self.subject_repo.get_by_id(subject_id)
         if not subject or subject.profesor_id != self.profesor_user.id:
@@ -145,7 +147,6 @@ class ProfesorService:
                 "codigo_institucional": subject.codigo_institucional,
             },
             "students": [],
-            "format": format,
         }
         
         for enrollment in enrollments:
@@ -166,11 +167,13 @@ class ProfesorService:
                     "apellido": estudiante.apellido,
                     "codigo_institucional": estudiante.codigo_institucional,
                 },
-                "grades": [{"nota": float(g.nota), "periodo": g.periodo} for g in grades],
+                "grades": [{"nota": float(g.nota), "periodo": g.periodo, "fecha": str(g.fecha)} for g in grades],
                 "average": float(average) if average else None,
             })
         
-        return report_data
+        # Use Factory Method to generate report
+        generator = ReportFactory.create_generator(format)
+        return generator.generate(report_data)
     
     async def update_profile(self, user_data: UserUpdate) -> User:
         """Update profesor's own profile.

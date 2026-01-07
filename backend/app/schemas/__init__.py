@@ -5,6 +5,7 @@ from app.schemas.subject import SubjectBase, SubjectCreate, SubjectUpdate, Subje
 from app.schemas.enrollment import EnrollmentBase, EnrollmentCreate, EnrollmentResponse
 from app.schemas.grade import GradeBase, GradeCreate, GradeUpdate, GradeResponse
 from app.schemas.token import Token, TokenData
+from app.schemas.report import ReportRequest, ReportResponse
 
 __all__ = [
     "UserBase",
@@ -24,4 +25,6 @@ __all__ = [
     "GradeResponse",
     "Token",
     "TokenData",
+    "ReportRequest",
+    "ReportResponse",
 ]

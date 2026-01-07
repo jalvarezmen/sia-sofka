@@ -109,14 +109,16 @@ class EstudianteService:
         }
     
     async def generate_general_report(self, format: str = "pdf") -> dict:
-        """Generate general report with all subjects and grades (placeholder for Factory Method).
+        """Generate general report with all subjects and grades using Factory Method.
         
         Args:
             format: Report format (pdf, html, json)
         
         Returns:
-            Report data (will be implemented with Factory Method)
+            Report with content, filename, and content_type
         """
+        from app.factories.report_factory import ReportFactory
+        
         enrollments = await self.enrollment_repo.get_by_estudiante(
             self.estudiante_user.id
         )
@@ -130,7 +132,6 @@ class EstudianteService:
                 "programa_academico": self.estudiante_user.programa_academico,
             },
             "subjects": [],
-            "format": format,
         }
         
         for enrollment in enrollments:
@@ -155,7 +156,9 @@ class EstudianteService:
                 "average": float(average) if average else None,
             })
         
-        return report_data
+        # Use Factory Method to generate report
+        generator = ReportFactory.create_generator(format)
+        return generator.generate(report_data)
     
     async def update_profile(self, user_data: UserUpdate) -> User:
         """Update estudiante's own profile.
