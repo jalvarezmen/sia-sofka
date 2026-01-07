@@ -1,0 +1,170 @@
+"""Estudiante service with estudiante-specific business logic."""
+
+from sqlalchemy.ext.asyncio import AsyncSession
+from app.models.user import User
+from app.services.user_service import UserService
+from app.services.grade_service import GradeService
+from app.repositories.enrollment_repository import EnrollmentRepository
+from app.repositories.subject_repository import SubjectRepository
+from app.schemas.user import UserUpdate
+
+
+class EstudianteService:
+    """Service for estudiante-specific business logic."""
+    
+    def __init__(self, db: AsyncSession, estudiante_user: User):
+        """Initialize estudiante service.
+        
+        Args:
+            db: Database session
+            estudiante_user: Estudiante user instance
+        """
+        self.db = db
+        self.estudiante_user = estudiante_user
+        self.user_service = UserService(db)
+        self.grade_service = GradeService(db)
+        self.enrollment_repo = EnrollmentRepository(db)
+        self.subject_repo = SubjectRepository(db)
+    
+    async def get_all_enrollments(self) -> list:
+        """Get all enrollments for this estudiante.
+        
+        Returns:
+            List of enrollments with subject information
+        """
+        enrollments = await self.enrollment_repo.get_by_estudiante(
+            self.estudiante_user.id
+        )
+        
+        result = []
+        for enrollment in enrollments:
+            subject = await self.subject_repo.get_by_id(enrollment.subject_id)
+            if subject:
+                result.append({
+                    "enrollment": enrollment,
+                    "subject": subject,
+                })
+        
+        return result
+    
+    async def get_grades_by_subject(self, subject_id: int) -> list:
+        """Get grades for this estudiante in a specific subject.
+        
+        Args:
+            subject_id: Subject ID
+        
+        Returns:
+            List of grades
+        
+        Raises:
+            ValueError: If estudiante is not enrolled in this subject
+        """
+        # Verify enrollment
+        enrollment = await self.enrollment_repo.get_by_estudiante_and_subject(
+            self.estudiante_user.id, subject_id
+        )
+        
+        if not enrollment:
+            raise ValueError("Estudiante is not enrolled in this subject")
+        
+        return await self.grade_service.get_grades_by_enrollment(enrollment.id)
+    
+    async def get_subject_status(self, subject_id: int) -> dict:
+        """Get complete status of a subject for this estudiante.
+        
+        Args:
+            subject_id: Subject ID
+        
+        Returns:
+            Dictionary with subject, enrollment, grades, and average
+        
+        Raises:
+            ValueError: If estudiante is not enrolled in this subject
+        """
+        # Verify enrollment
+        enrollment = await self.enrollment_repo.get_by_estudiante_and_subject(
+            self.estudiante_user.id, subject_id
+        )
+        
+        if not enrollment:
+            raise ValueError("Estudiante is not enrolled in this subject")
+        
+        # Get subject
+        subject = await self.subject_repo.get_by_id(subject_id)
+        
+        # Get grades
+        grades = await self.grade_service.get_grades_by_enrollment(enrollment.id)
+        
+        # Calculate average
+        try:
+            average = await self.grade_service.calculate_average(enrollment.id)
+        except ValueError:
+            average = None
+        
+        return {
+            "subject": subject,
+            "enrollment": enrollment,
+            "grades": grades,
+            "average": float(average) if average else None,
+        }
+    
+    async def generate_general_report(self, format: str = "pdf") -> dict:
+        """Generate general report with all subjects and grades (placeholder for Factory Method).
+        
+        Args:
+            format: Report format (pdf, html, json)
+        
+        Returns:
+            Report data (will be implemented with Factory Method)
+        """
+        enrollments = await self.enrollment_repo.get_by_estudiante(
+            self.estudiante_user.id
+        )
+        
+        report_data = {
+            "estudiante": {
+                "id": self.estudiante_user.id,
+                "nombre": self.estudiante_user.nombre,
+                "apellido": self.estudiante_user.apellido,
+                "codigo_institucional": self.estudiante_user.codigo_institucional,
+                "programa_academico": self.estudiante_user.programa_academico,
+            },
+            "subjects": [],
+            "format": format,
+        }
+        
+        for enrollment in enrollments:
+            subject = await self.subject_repo.get_by_id(enrollment.subject_id)
+            if not subject:
+                continue
+            
+            grades = await self.grade_service.get_grades_by_enrollment(enrollment.id)
+            try:
+                average = await self.grade_service.calculate_average(enrollment.id)
+            except ValueError:
+                average = None
+            
+            report_data["subjects"].append({
+                "subject": {
+                    "id": subject.id,
+                    "nombre": subject.nombre,
+                    "codigo_institucional": subject.codigo_institucional,
+                    "numero_creditos": subject.numero_creditos,
+                },
+                "grades": [{"nota": float(g.nota), "periodo": g.periodo, "fecha": str(g.fecha)} for g in grades],
+                "average": float(average) if average else None,
+            })
+        
+        return report_data
+    
+    async def update_profile(self, user_data: UserUpdate) -> User:
+        """Update estudiante's own profile.
+        
+        Args:
+            user_data: User update data
+        
+        Returns:
+            Updated estudiante
+        """
+        return await self.user_service.update_user(self.estudiante_user.id, user_data)
+

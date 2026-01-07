@@ -1,0 +1,229 @@
+"""Admin service with admin-specific business logic."""
+
+from decimal import Decimal
+from sqlalchemy.ext.asyncio import AsyncSession
+from app.models.user import User, UserRole
+from app.services.user_service import UserService
+from app.services.subject_service import SubjectService
+from app.services.grade_service import GradeService
+from app.repositories.enrollment_repository import EnrollmentRepository
+from app.schemas.user import UserCreate, UserUpdate
+from app.schemas.subject import SubjectCreate, SubjectUpdate
+
+
+class AdminService:
+    """Service for admin-specific business logic."""
+    
+    def __init__(self, db: AsyncSession, admin_user: User):
+        """Initialize admin service.
+        
+        Args:
+            db: Database session
+            admin_user: Admin user instance
+        """
+        self.db = db
+        self.admin_user = admin_user
+        self.user_service = UserService(db)
+        self.subject_service = SubjectService(db)
+        self.grade_service = GradeService(db)
+        self.enrollment_repo = EnrollmentRepository(db)
+    
+    # User Management
+    
+    async def create_estudiante(self, user_data: UserCreate) -> User:
+        """Create a new estudiante.
+        
+        Args:
+            user_data: Estudiante creation data
+        
+        Returns:
+            Created estudiante
+        
+        Raises:
+            ValueError: If role is not Estudiante
+        """
+        if user_data.role != UserRole.ESTUDIANTE:
+            raise ValueError("Role must be Estudiante")
+        return await self.user_service.create_user(user_data)
+    
+    async def create_profesor(self, user_data: UserCreate) -> User:
+        """Create a new profesor.
+        
+        Args:
+            user_data: Profesor creation data
+        
+        Returns:
+            Created profesor
+        
+        Raises:
+            ValueError: If role is not Profesor
+        """
+        if user_data.role != UserRole.PROFESOR:
+            raise ValueError("Role must be Profesor")
+        return await self.user_service.create_user(user_data)
+    
+    async def update_user(self, user_id: int, user_data: UserUpdate) -> User | None:
+        """Update a user.
+        
+        Args:
+            user_id: User ID
+            user_data: User update data
+        
+        Returns:
+            Updated user or None
+        """
+        return await self.user_service.update_user(user_id, user_data)
+    
+    async def delete_user(self, user_id: int) -> bool:
+        """Delete a user.
+        
+        Args:
+            user_id: User ID
+        
+        Returns:
+            True if deleted, False if not found
+        """
+        return await self.user_service.delete_user(user_id)
+    
+    async def get_all_estudiantes(self, skip: int = 0, limit: int = 100) -> list[User]:
+        """Get all estudiantes.
+        
+        Args:
+            skip: Number of records to skip
+            limit: Maximum number of records to return
+        
+        Returns:
+            List of estudiantes
+        """
+        return await self.user_service.get_users_by_role(
+            UserRole.ESTUDIANTE.value, skip, limit
+        )
+    
+    async def get_all_profesores(self, skip: int = 0, limit: int = 100) -> list[User]:
+        """Get all profesores.
+        
+        Args:
+            skip: Number of records to skip
+            limit: Maximum number of records to return
+        
+        Returns:
+            List of profesores
+        """
+        return await self.user_service.get_users_by_role(
+            UserRole.PROFESOR.value, skip, limit
+        )
+    
+    # Subject Management
+    
+    async def create_subject(self, subject_data: SubjectCreate) -> Subject:
+        """Create a new subject.
+        
+        Args:
+            subject_data: Subject creation data
+        
+        Returns:
+            Created subject
+        """
+        return await self.subject_service.create_subject(subject_data)
+    
+    async def update_subject(
+        self, subject_id: int, subject_data: SubjectUpdate
+    ) -> Subject | None:
+        """Update a subject.
+        
+        Args:
+            subject_id: Subject ID
+            subject_data: Subject update data
+        
+        Returns:
+            Updated subject or None
+        """
+        return await self.subject_service.update_subject(subject_id, subject_data)
+    
+    async def delete_subject(self, subject_id: int) -> bool:
+        """Delete a subject.
+        
+        Args:
+            subject_id: Subject ID
+        
+        Returns:
+            True if deleted, False if not found
+        """
+        return await self.subject_service.delete_subject(subject_id)
+    
+    # Average Calculation
+    
+    async def generate_average(
+        self, estudiante_id: int, subject_id: int
+    ) -> Decimal:
+        """Generate average grade for estudiante in a subject.
+        
+        Args:
+            estudiante_id: Estudiante user ID
+            subject_id: Subject ID
+        
+        Returns:
+            Average grade as Decimal
+        
+        Raises:
+            ValueError: If enrollment not found or no grades
+        """
+        # Find enrollment
+        enrollment = await self.enrollment_repo.get_by_estudiante_and_subject(
+            estudiante_id, subject_id
+        )
+        
+        if not enrollment:
+            raise ValueError("Estudiante is not enrolled in this subject")
+        
+        # Calculate average
+        return await self.grade_service.calculate_average(enrollment.id)
+    
+    # Report Generation (will use Factory Method in next stage)
+    async def generate_student_report(
+        self, estudiante_id: int, format: str = "json"
+    ) -> dict:
+        """Generate report for a student (placeholder for Factory Method).
+        
+        Args:
+            estudiante_id: Estudiante user ID
+            format: Report format (pdf, html, json)
+        
+        Returns:
+            Report data (will be implemented with Factory Method)
+        """
+        # This will be fully implemented in Etapa 6 with Factory Method
+        estudiante = await self.user_service.get_user_by_id(estudiante_id)
+        if not estudiante:
+            raise ValueError("Estudiante not found")
+        
+        enrollments = await self.enrollment_repo.get_by_estudiante(estudiante_id)
+        
+        report_data = {
+            "estudiante": {
+                "id": estudiante.id,
+                "nombre": estudiante.nombre,
+                "apellido": estudiante.apellido,
+                "codigo_institucional": estudiante.codigo_institucional,
+            },
+            "enrollments": [],
+            "format": format,
+        }
+        
+        # Add enrollment and grade data
+        for enrollment in enrollments:
+            grades = await self.grade_service.get_grades_by_enrollment(enrollment.id)
+            try:
+                average = await self.grade_service.calculate_average(enrollment.id)
+            except ValueError:
+                average = None
+            
+            report_data["enrollments"].append({
+                "enrollment_id": enrollment.id,
+                "subject_id": enrollment.subject_id,
+                "grades": [{"nota": float(g.nota), "periodo": g.periodo} for g in grades],
+                "average": float(average) if average else None,
+            })
+        
+        return report_data
+
