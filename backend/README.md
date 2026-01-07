@@ -1,5 +1,10 @@
 # SIA SOFKA U - Backend
 
+[![CI Pipeline](https://github.com/YOUR_USERNAME/sia-sofka/actions/workflows/ci.yml/badge.svg)](https://github.com/YOUR_USERNAME/sia-sofka/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/YOUR_USERNAME/sia-sofka/branch/main/graph/badge.svg)](https://codecov.io/gh/YOUR_USERNAME/sia-sofka)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
+[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
+
 Sistema de Información Académica SOFKA U - Backend API
 
 ## Configuración
@@ -57,6 +62,13 @@ pip install -r requirements.txt
 pip install -r requirements-dev.txt
 ```
 
+### Configurar pre-commit hooks (opcional)
+
+```bash
+pip install pre-commit
+pre-commit install
+```
+
 ### Ejecutar migraciones
 
 ```bash
@@ -71,9 +83,105 @@ uvicorn app.main:app --reload
 
 ## Testing
 
+### Ejecutar todas las pruebas
+
 ```bash
 pytest
 ```
+
+### Ejecutar pruebas con cobertura
+
+```bash
+pytest --cov=app --cov-report=html --cov-report=term-missing
+```
+
+### Ver reporte de cobertura en HTML
+
+```bash
+# El reporte se genera en htmlcov/index.html
+open htmlcov/index.html  # macOS
+xdg-open htmlcov/index.html  # Linux
+start htmlcov/index.html  # Windows
+```
+
+## Calidad de Código
+
+### Formatear código con black
+
+```bash
+black app tests
+```
+
+### Verificar código con flake8
+
+```bash
+flake8 app tests
+```
+
+### Type checking con mypy
+
+```bash
+mypy app
+```
+
+### Ejecutar todas las verificaciones de calidad
+
+```bash
+black --check app tests && flake8 app tests && mypy app && pytest --cov=app
+```
+
+## 🛠️ Scripts de Desarrollo
+
+Para facilitar el desarrollo, se incluyen scripts auxiliares:
+
+### Linux/macOS - Makefile
+
+```bash
+# Ver todos los comandos disponibles
+make help
+
+# Instalar dependencias de desarrollo
+make install-dev
+
+# Ejecutar pruebas con cobertura
+make test-cov
+
+# Ejecutar todas las verificaciones de calidad
+make quality
+
+# Simular pipeline de CI localmente
+make ci
+```
+
+### Windows - PowerShell
+
+```powershell
+# Ver todos los comandos disponibles
+.\dev.ps1 help
+
+# Instalar dependencias de desarrollo
+.\dev.ps1 install-dev
+
+# Ejecutar pruebas con cobertura
+.\dev.ps1 test-cov
+
+# Ejecutar todas las verificaciones de calidad
+.\dev.ps1 quality
+
+# Simular pipeline de CI localmente
+.\dev.ps1 ci
+```
+
+## 📊 CI/CD
+
+El proyecto utiliza **GitHub Actions** para automatizar:
+- Linting y formateo de código
+- Type checking
+- Ejecución de pruebas
+- Verificación de cobertura (mínimo 80%)
+- Build de imagen Docker
+
+Ver [CI_CD.md](CI_CD.md) para más detalles sobre el pipeline.
 
 ## Estructura del Proyecto
 
