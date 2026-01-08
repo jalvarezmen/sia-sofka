@@ -3,6 +3,7 @@
 from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
+from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
 from app.core.exceptions import BaseAppException
 from app.api.v1 import api_router
@@ -12,6 +13,21 @@ app = FastAPI(
     version=settings.app_version,
     debug=settings.debug,
     description="Sistema de Información Académica SOFKA U - API Backend",
+)
+
+# Configure CORS - Must be added before routers
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:3000",
+        "http://localhost:3001",
+        "http://127.0.0.1:3000",
+        "http://127.0.0.1:3001",
+    ],
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
+    allow_headers=["*"],
+    expose_headers=["*"],
 )
 
 # Include API routers

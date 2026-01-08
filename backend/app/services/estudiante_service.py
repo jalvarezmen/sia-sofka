@@ -156,6 +156,23 @@ class EstudianteService:
                 "average": float(average) if average else None,
             })
         
+        # Calculate general average (weighted by credits)
+        from decimal import Decimal
+        total_weighted_sum = Decimal("0.0")
+        total_credits = Decimal("0.0")
+        for subject_info in report_data["subjects"]:
+            if subject_info["average"] is not None:
+                credits = Decimal(str(subject_info["subject"]["numero_creditos"]))
+                average = Decimal(str(subject_info["average"]))
+                total_weighted_sum += average * credits
+                total_credits += credits
+        
+        if total_credits > 0:
+            general_average = float(total_weighted_sum / total_credits)
+            report_data["general_average"] = round(general_average, 2)
+        else:
+            report_data["general_average"] = None
+        
         # Use Factory Method to generate report
         generator = ReportFactory.create_generator(format)
         return generator.generate(report_data)

@@ -111,6 +111,19 @@ class PDFReportGenerator(ReportGenerator):
         ]))
         story.append(table)
         
+        # Add general average if present
+        if "subjects" in data and "general_average" in data and data["general_average"] is not None:
+            story.append(Spacer(1, 0.3 * inch))
+            general_avg_style = ParagraphStyle(
+                "GeneralAverage",
+                parent=styles["Heading2"],
+                fontSize=14,
+                textColor=colors.HexColor("#1a237e"),
+                spaceAfter=10,
+            )
+            general_avg_text = f"Promedio General del Semestre: {data['general_average']:.2f}"
+            story.append(Paragraph(general_avg_text, general_avg_style))
+        
         # Add footer
         story.append(Spacer(1, 0.3 * inch))
         footer_text = f"Generado el {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}"

@@ -173,6 +173,15 @@ class HTMLReportGenerator(ReportGenerator):
         </table>
         {% endif %}
         
+        {% if general_average %}
+        <div class="info-section" style="margin-top: 30px; background-color: #e3f2fd; border-left: 4px solid #1a237e;">
+            <div class="info-row">
+                <span class="info-label" style="font-size: 16px;">Promedio General del Semestre:</span>
+                <span style="font-size: 18px; font-weight: bold; color: #1a237e;">{{ "%.2f"|format(general_average) }}</span>
+            </div>
+        </div>
+        {% endif %}
+        
         <div class="footer">
             Generado el {{ timestamp }}
         </div>

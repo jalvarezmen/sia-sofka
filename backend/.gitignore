@@ -68,4 +68,12 @@ coverage.xml
 *.cover
 .hypothesis/
 
+# Generated PDFs
+*.pdf
+
+# Temporary scripts (development only)
+assign_grades*.py
+generate_pdf*.py
+populate_data.py
+
 

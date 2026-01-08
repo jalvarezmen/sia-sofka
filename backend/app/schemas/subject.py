@@ -28,10 +28,25 @@ class SubjectUpdate(BaseModel):
     profesor_id: Optional[int] = None
 
 
+# Schema anidado simplificado para el profesor
+class ProfesorInfo(BaseModel):
+    """Información básica del profesor."""
+    id: int
+    nombre: str
+    apellido: str
+    codigo_institucional: str
+    email: str
+    
+    model_config = ConfigDict(from_attributes=True)
+
+
 class SubjectResponse(SubjectBase):
     """Schema for subject response."""
     id: int
     profesor_id: int
+    
+    # Nested model
+    profesor: Optional[ProfesorInfo] = None
     
     model_config = ConfigDict(from_attributes=True)
 

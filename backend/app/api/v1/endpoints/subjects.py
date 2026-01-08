@@ -37,11 +37,48 @@ async def get_subjects(
     current_user: User = Depends(require_admin),
 ):
     """Get all subjects (Admin only)."""
-    from app.repositories.subject_repository import SubjectRepository
+    from sqlalchemy.orm import selectinload
+    from sqlalchemy import select
+    from app.models.subject import Subject
+    from app.schemas.subject import SubjectResponse
     
-    repo = SubjectRepository(db)
-    subjects = await repo.get_all(skip, limit)
-    return subjects
+    stmt = (
+        select(Subject)
+        .options(selectinload(Subject.profesor))
+        .offset(skip)
+        .limit(limit)
+    )
+    result = await db.execute(stmt)
+    subjects = result.scalars().all()
+    
+    # Serializar manualmente para asegurar que las relaciones se incluyan
+    serialized_subjects = []
+    for subject in subjects:
+        subject_dict = {
+            "id": subject.id,
+            "nombre": subject.nombre,
+            "codigo_institucional": subject.codigo_institucional,
+            "numero_creditos": subject.numero_creditos,
+            "horario": subject.horario,
+            "descripcion": subject.descripcion,
+            "profesor_id": subject.profesor_id,
+            "profesor": None,
+        }
+        
+        # Incluir profesor si está cargado
+        if subject.profesor:
+            from app.schemas.subject import ProfesorInfo
+            subject_dict["profesor"] = ProfesorInfo(
+                id=subject.profesor.id,
+                nombre=subject.profesor.nombre,
+                apellido=subject.profesor.apellido,
+                codigo_institucional=subject.profesor.codigo_institucional,
+                email=subject.profesor.email,
+            )
+        
+        serialized_subjects.append(SubjectResponse(**subject_dict))
+    
+    return serialized_subjects
 
 
 @router.get("/{subject_id}", response_model=SubjectResponse)
