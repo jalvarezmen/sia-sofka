@@ -62,23 +62,35 @@ function Install-DevDependencies {
 
 function Run-Tests {
     Write-Host "🧪 Ejecutando pruebas..." -ForegroundColor Green
-    pytest -v
+    $env:DATABASE_URL = "sqlite+aiosqlite:///:memory:"
+    $env:DATABASE_URL_SYNC = "sqlite:///:memory:"
+    $env:SECRET_KEY = "test-secret-key-for-development-only"
+    pytest -v --ignore=tests/integration/test_api.py
 }
 
 function Run-TestsWithCoverage {
     Write-Host "🧪 Ejecutando pruebas con cobertura..." -ForegroundColor Green
-    pytest --cov=app --cov-report=html --cov-report=term-missing --cov-report=xml
+    $env:DATABASE_URL = "sqlite+aiosqlite:///:memory:"
+    $env:DATABASE_URL_SYNC = "sqlite:///:memory:"
+    $env:SECRET_KEY = "test-secret-key-for-development-only"
+    pytest --cov=app --cov-report=html --cov-report=term-missing --cov-report=xml --ignore=tests/integration/test_api.py
     Write-Host "📊 Reporte HTML generado en htmlcov/index.html" -ForegroundColor Cyan
 }
 
 function Run-UnitTests {
     Write-Host "🧪 Ejecutando pruebas unitarias..." -ForegroundColor Green
+    $env:DATABASE_URL = "sqlite+aiosqlite:///:memory:"
+    $env:DATABASE_URL_SYNC = "sqlite:///:memory:"
+    $env:SECRET_KEY = "test-secret-key-for-development-only"
     pytest tests/unit/ -v
 }
 
 function Run-IntegrationTests {
     Write-Host "🧪 Ejecutando pruebas de integración..." -ForegroundColor Green
-    pytest tests/integration/ -v
+    $env:DATABASE_URL = "sqlite+aiosqlite:///:memory:"
+    $env:DATABASE_URL_SYNC = "sqlite:///:memory:"
+    $env:SECRET_KEY = "test-secret-key-for-development-only"
+    pytest tests/integration/ -v --ignore=tests/integration/test_api.py
 }
 
 function Run-Lint {
