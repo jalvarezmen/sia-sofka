@@ -33,9 +33,13 @@ app.add_middleware(
 
 # Configure rate limiting (only if enabled)
 if ENABLE_RATE_LIMITING and limiter is not None:
-    from slowapi.errors import _rate_limit_exceeded_handler
-    app.state.limiter = limiter
-    app.add_exception_handler(RateLimitExceededException, _rate_limit_exceeded_handler)
+    try:
+        from slowapi.errors import _rate_limit_exceeded_handler
+        app.state.limiter = limiter
+        app.add_exception_handler(RateLimitExceededException, _rate_limit_exceeded_handler)
+    except ImportError:
+        # If slowapi is not installed, rate limiting is disabled
+        pass
 
 # Include API routers
 app.include_router(api_router, prefix="/api/v1")

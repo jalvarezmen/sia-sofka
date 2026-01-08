@@ -3,17 +3,32 @@
 import logging
 import sys
 from pathlib import Path
-from app.core.config import settings
+import os
 
 # Create logger
 logger = logging.getLogger("sia_sofka")
-logger.setLevel(logging.INFO if not settings.debug else logging.DEBUG)
+
+# Get debug setting safely (avoid circular imports)
+def _get_debug_setting() -> bool:
+    """Get debug setting safely."""
+    try:
+        # Try to get from environment first (faster, no import needed)
+        debug_env = os.getenv("DEBUG", "").lower()
+        if debug_env in ("true", "1", "yes"):
+            return True
+        # Fallback to settings if available
+        from app.core.config import settings
+        return getattr(settings, "debug", False)
+    except Exception:
+        return False
 
 # Prevent duplicate handlers
 if not logger.handlers:
     # Console handler
     console_handler = logging.StreamHandler(sys.stdout)
-    console_handler.setLevel(logging.INFO if not settings.debug else logging.DEBUG)
+    debug_mode = _get_debug_setting()
+    console_handler.setLevel(logging.INFO if not debug_mode else logging.DEBUG)
+    logger.setLevel(logging.INFO if not debug_mode else logging.DEBUG)
     
     # Formatter
     formatter = logging.Formatter(
@@ -38,7 +53,7 @@ if not logger.handlers:
         file_handler.setLevel(logging.INFO)
         file_handler.setFormatter(formatter)
         logger.addHandler(file_handler)
-    except (PermissionError, OSError):
+    except (PermissionError, OSError, Exception):
         # If we can't create log files, just use console
         pass
 

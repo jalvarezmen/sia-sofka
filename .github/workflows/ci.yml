@@ -49,6 +49,14 @@ jobs:
 
     - name: Lint with flake8
       working-directory: ./backend
+      env:
+        DATABASE_URL: "sqlite+aiosqlite:///:memory:"
+        DATABASE_URL_SYNC: "sqlite:///:memory:"
+        SECRET_KEY: test-secret-key-for-ci-pipeline-minimum-32-chars
+        ALGORITHM: HS256
+        ACCESS_TOKEN_EXPIRE_MINUTES: 30
+        DEBUG: "false"
+        ENABLE_RATE_LIMITING: "false"
       run: |
         # Stop the build if there are Python syntax errors or undefined names
         flake8 app tests --count --select=E9,F63,F7,F82 --show-source --statistics
@@ -57,11 +65,27 @@ jobs:
 
     - name: Check code formatting with black
       working-directory: ./backend
+      env:
+        DATABASE_URL: "sqlite+aiosqlite:///:memory:"
+        DATABASE_URL_SYNC: "sqlite:///:memory:"
+        SECRET_KEY: test-secret-key-for-ci-pipeline-minimum-32-chars
+        ALGORITHM: HS256
+        ACCESS_TOKEN_EXPIRE_MINUTES: 30
+        DEBUG: "false"
+        ENABLE_RATE_LIMITING: "false"
       run: |
         black --check app tests
 
     - name: Type check with mypy
       working-directory: ./backend
+      env:
+        DATABASE_URL: "sqlite+aiosqlite:///:memory:"
+        DATABASE_URL_SYNC: "sqlite:///:memory:"
+        SECRET_KEY: test-secret-key-for-ci-pipeline-minimum-32-chars
+        ALGORITHM: HS256
+        ACCESS_TOKEN_EXPIRE_MINUTES: 30
+        DEBUG: "false"
+        ENABLE_RATE_LIMITING: "false"
       run: |
         mypy app --ignore-missing-imports
 
@@ -70,9 +94,11 @@ jobs:
       env:
         DATABASE_URL: "sqlite+aiosqlite:///:memory:"
         DATABASE_URL_SYNC: "sqlite:///:memory:"
-        SECRET_KEY: test-secret-key-for-ci
+        SECRET_KEY: test-secret-key-for-ci-pipeline-minimum-32-chars
         ALGORITHM: HS256
         ACCESS_TOKEN_EXPIRE_MINUTES: 30
+        DEBUG: "false"
+        ENABLE_RATE_LIMITING: "false"
       run: |
         pytest tests/ -v --cov=app --cov-report=xml --cov-report=html --cov-report=term-missing --ignore=tests/integration/test_api.py
 
