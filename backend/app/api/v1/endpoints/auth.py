@@ -8,6 +8,7 @@ from sqlalchemy import select
 from app.core.database import get_db
 from app.core.security import verify_password, get_password_hash, create_access_token
 from app.core.config import settings
+from app.core.rate_limit import rate_limit
 from app.models.user import User, UserRole
 from app.schemas.token import Token
 from app.schemas.user import UserCreate, UserResponse
@@ -22,6 +23,7 @@ router = APIRouter()
 
 
 @router.post("/login", response_model=Token)
+@rate_limit("10/minute")  # Rate limiting opcional (solo si ENABLE_RATE_LIMITING=true)
 async def login(
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: AsyncSession = Depends(get_db),

@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.core.exceptions import NotFoundError, ValidationError, ConflictError
+from app.core.logging import logger
 from app.models.user import User
 from app.schemas.enrollment import EnrollmentCreate, EnrollmentResponse
 from app.services.enrollment_service import EnrollmentService
@@ -111,7 +112,11 @@ async def get_enrollments(
                     "email": estudiante.email,
                 }
         except Exception as e:
-            print(f"ERROR loading estudiante {enrollment.estudiante_id}: {e}")
+            logger.error(
+                f"Error loading estudiante {enrollment.estudiante_id}",
+                exc_info=True,
+                extra={"enrollment_id": enrollment.id, "estudiante_id": enrollment.estudiante_id}
+            )
         
         # Cargar subject siempre (hacer query manual para asegurar)
         try:
@@ -123,7 +128,11 @@ async def get_enrollments(
                     "codigo_institucional": subject.codigo_institucional,
                 }
         except Exception as e:
-            print(f"ERROR loading subject {enrollment.subject_id}: {e}")
+            logger.error(
+                f"Error loading subject {enrollment.subject_id}",
+                exc_info=True,
+                extra={"enrollment_id": enrollment.id, "subject_id": enrollment.subject_id}
+            )
         
         serialized_enrollments.append(EnrollmentResponse(**enrollment_dict))
     

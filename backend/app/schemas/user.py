@@ -1,9 +1,10 @@
 """User schemas."""
 
-from pydantic import BaseModel, EmailStr, Field, ConfigDict
+from pydantic import BaseModel, EmailStr, Field, ConfigDict, field_validator
 from datetime import date, datetime
 from typing import Optional
 from app.models.user import UserRole
+from app.core.sanitizers import validate_email
 
 
 class UserBase(BaseModel):
@@ -13,6 +14,12 @@ class UserBase(BaseModel):
     apellido: str = Field(..., min_length=1, max_length=100)
     fecha_nacimiento: date
     numero_contacto: Optional[str] = None
+    
+    @field_validator('email')
+    @classmethod
+    def validate_email_format(cls, v: str) -> str:
+        """Validate and normalize email address."""
+        return validate_email(v)
 
 
 class UserCreate(UserBase):

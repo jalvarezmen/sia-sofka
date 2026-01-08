@@ -6,6 +6,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
 from app.core.exceptions import BaseAppException
+from app.core.rate_limit import ENABLE_RATE_LIMITING, limiter, RateLimitExceededException
 from app.api.v1 import api_router
 
 app = FastAPI(
@@ -29,6 +30,12 @@ app.add_middleware(
     allow_headers=["*"],
     expose_headers=["*"],
 )
+
+# Configure rate limiting (only if enabled)
+if ENABLE_RATE_LIMITING and limiter is not None:
+    from slowapi.errors import _rate_limit_exceeded_handler
+    app.state.limiter = limiter
+    app.add_exception_handler(RateLimitExceededException, _rate_limit_exceeded_handler)
 
 # Include API routers
 app.include_router(api_router, prefix="/api/v1")
