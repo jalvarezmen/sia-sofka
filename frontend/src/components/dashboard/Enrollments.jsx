@@ -95,10 +95,15 @@ const Enrollments = () => {
   return (
     <div>
       <div className="flex justify-between items-center mb-6">
-        <h1 className="text-3xl font-bold text-gray-900">Inscripciones</h1>
+        <div>
+          <h1 className="text-4xl font-bold bg-gradient-to-r from-purple-600 to-purple-800 bg-clip-text text-transparent mb-1">
+            Inscripciones
+          </h1>
+          <p className="text-gray-600 text-sm">Gestiona las inscripciones de estudiantes</p>
+        </div>
         <button
           onClick={handleCreate}
-          className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+          className="flex items-center space-x-2 px-5 py-3 bg-gradient-to-r from-purple-600 to-purple-700 text-white rounded-xl hover:from-purple-700 hover:to-purple-800 shadow-lg hover:shadow-xl transition-all duration-200 font-semibold transform hover:scale-105"
         >
           <Plus className="w-5 h-5" />
           <span>Nueva Inscripción</span>
@@ -106,34 +111,34 @@ const Enrollments = () => {
       </div>
 
       {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-4">
-          {error}
+        <div className="bg-red-50 border-l-4 border-red-500 text-red-700 px-4 py-3 rounded-lg mb-4 shadow-md">
+          <p className="font-medium">{error}</p>
         </div>
       )}
 
       {success && (
-        <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded mb-4">
-          {success}
+        <div className="bg-green-50 border-l-4 border-green-500 text-green-700 px-4 py-3 rounded-lg mb-4 shadow-md">
+          <p className="font-medium">{success}</p>
         </div>
       )}
 
-      <div className="bg-white rounded-lg shadow overflow-hidden">
+      <div className="bg-white rounded-2xl shadow-lg overflow-hidden border border-gray-100">
         <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
+          <thead className="bg-gradient-to-r from-purple-600 to-purple-700">
             <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+              <th className="px-6 py-4 text-left text-xs font-semibold text-white uppercase tracking-wider">
                 Estudiante
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+              <th className="px-6 py-4 text-left text-xs font-semibold text-white uppercase tracking-wider">
                 Materia
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+              <th className="px-6 py-4 text-left text-xs font-semibold text-white uppercase tracking-wider">
                 Código Estudiante
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+              <th className="px-6 py-4 text-left text-xs font-semibold text-white uppercase tracking-wider">
                 Fecha
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+              <th className="px-6 py-4 text-left text-xs font-semibold text-white uppercase tracking-wider">
                 Acciones
               </th>
             </tr>
@@ -154,17 +159,17 @@ const Enrollments = () => {
                 const codigoEstudiante = enrollment.estudiante?.codigo_institucional || 'N/A'
                 
                 return (
-                  <tr key={enrollment.id}>
-                    <td className="px-6 py-4 whitespace-nowrap">
+                  <tr key={enrollment.id} className="hover:bg-purple-50 transition-colors duration-150">
+                    <td className="px-6 py-4 whitespace-nowrap font-medium text-gray-900">
                       {estudianteNombre} {estudianteApellido}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
+                    <td className="px-6 py-4 whitespace-nowrap text-gray-700">
                       {subjectNombre}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
+                    <td className="px-6 py-4 whitespace-nowrap text-gray-700">
                       {codigoEstudiante}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
+                    <td className="px-6 py-4 whitespace-nowrap text-gray-700">
                       {enrollment.created_at
                         ? new Date(enrollment.created_at).toLocaleDateString('es-ES')
                         : '-'}
@@ -172,10 +177,10 @@ const Enrollments = () => {
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                       <button
                         onClick={() => handleDelete(enrollment.id)}
-                        className="text-red-600 hover:text-red-900"
+                        className="p-2 text-red-600 hover:text-white hover:bg-red-600 rounded-lg transition-all duration-200 hover:scale-110"
                         title="Eliminar"
                       >
-                        <Trash2 className="w-5 h-5 inline" />
+                        <Trash2 className="w-5 h-5" />
                       </button>
                     </td>
                   </tr>

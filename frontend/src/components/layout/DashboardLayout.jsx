@@ -15,10 +15,10 @@ const DashboardLayout = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gradient-to-br from-purple-50 via-purple-50 to-blue-50">
       <Sidebar />
       <div className="lg:pl-64">
-        <main className="p-8">
+        <main className="p-6 md:p-8">
           <Outlet />
         </main>
       </div>
