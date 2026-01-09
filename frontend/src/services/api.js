@@ -41,7 +41,7 @@ api.interceptors.response.use(
     if (error.code === 'ECONNABORTED' || error.message === 'Network Error') {
       console.error('Error de conexión: No se pudo conectar con el servidor')
       return Promise.reject({
-        message: 'Error de conexión. Por favor, verifica tu conexión a internet.',
+        message: 'Error de conexión. Por favor, verifica tu conexión a .',
         isNetworkError: true,
       })
     }
