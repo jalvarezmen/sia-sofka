@@ -7,6 +7,7 @@ import Users from './components/dashboard/Users'
 import Subjects from './components/dashboard/Subjects'
 import Enrollments from './components/dashboard/Enrollments'
 import Grades from './components/dashboard/Grades'
+import Reports from './components/dashboard/Reports'
 
 function App() {
   return (
@@ -20,6 +21,7 @@ function App() {
             <Route path="subjects" element={<Subjects />} />
             <Route path="enrollments" element={<Enrollments />} />
             <Route path="grades" element={<Grades />} />
+            <Route path="reports" element={<Reports />} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

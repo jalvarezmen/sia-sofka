@@ -138,7 +138,13 @@ export const gradeService = {
 
 // ==================== REPORTS ====================
 export const reportService = {
-  getStudentReport: async (estudianteId, format = 'json') => {
+  /**
+   * Obtiene el reporte de un estudiante
+   * @param {number} estudianteId - ID del estudiante
+   * @param {string} format - Formato: 'pdf', 'html' o 'json'
+   * @returns {Promise<Blob|Object>} - Blob para PDF/HTML, Object para JSON
+   */
+  getStudentReport: async (estudianteId, format = 'pdf') => {
     const response = await api.get(`/reports/student/${estudianteId}`, {
       params: { format },
       responseType: format === 'json' ? 'json' : 'blob',

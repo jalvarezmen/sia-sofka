@@ -6,6 +6,7 @@ import {
   BookOpen, 
   UserCheck, 
   GraduationCap,
+  FileText,
   LogOut 
 } from 'lucide-react'
 
@@ -19,6 +20,7 @@ const Sidebar = () => {
     { path: '/subjects', label: 'Materias', icon: BookOpen, roles: ['Admin'] },
     { path: '/enrollments', label: 'Inscripciones', icon: UserCheck, roles: ['Admin'] },
     { path: '/grades', label: 'Notas', icon: GraduationCap },
+    { path: '/reports', label: 'Reportes', icon: FileText, roles: ['Admin'] },
   ]
 
   const filteredMenuItems = menuItems.filter((item) => {
