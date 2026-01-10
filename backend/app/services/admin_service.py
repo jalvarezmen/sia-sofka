@@ -193,7 +193,7 @@ class AdminService:
         Returns:
             Report with content, filename, and content_type
         """
-        from app.factories.report_factory import ReportFactory
+        from app.factories import ReportFactory  # Import from __init__.py to ensure generators are registered
         from app.repositories.subject_repository import SubjectRepository
         
         estudiante = await self.user_service.get_user_by_id(estudiante_id)

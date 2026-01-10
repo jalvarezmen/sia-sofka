@@ -3,9 +3,10 @@
 import json
 from typing import Dict, Any
 from datetime import datetime
-from app.factories.report_factory import ReportGenerator
+from app.factories.report_factory import ReportGenerator, ReportFactory
 
 
+@ReportFactory.register('json')
 class JSONReportGenerator(ReportGenerator):
     """JSON report generator implementation."""
     

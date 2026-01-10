@@ -8,9 +8,10 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
 from reportlab.lib import colors
-from app.factories.report_factory import ReportGenerator
+from app.factories.report_factory import ReportGenerator, ReportFactory
 
 
+@ReportFactory.register('pdf')
 class PDFReportGenerator(ReportGenerator):
     """PDF report generator implementation."""
     

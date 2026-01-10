@@ -27,13 +27,31 @@ class GradeUpdate(BaseModel):
     observaciones: Optional[str] = None
 
 
-# Schema anidado para la relación enrollment
+# Schemas anidados para relaciones
+class EstudianteBasicInfo(BaseModel):
+    """Info básica del estudiante."""
+    id: int
+    nombre: str
+    apellido: str
+    email: str
+    model_config = ConfigDict(from_attributes=True)
+
+
+class SubjectBasicInfo(BaseModel):
+    """Info básica de la materia."""
+    id: int
+    nombre: str
+    codigo_institucional: str
+    model_config = ConfigDict(from_attributes=True)
+
+
 class EnrollmentInfo(BaseModel):
-    """Información básica de la inscripción."""
+    """Información de la inscripción con relaciones anidadas."""
     id: int
     estudiante_id: int
     subject_id: int
-    
+    estudiante: Optional[EstudianteBasicInfo] = None
+    subject: Optional[SubjectBasicInfo] = None
     model_config = ConfigDict(from_attributes=True)
 
 

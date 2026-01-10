@@ -3,9 +3,10 @@
 from typing import Dict, Any
 from datetime import datetime
 from jinja2 import Template
-from app.factories.report_factory import ReportGenerator
+from app.factories.report_factory import ReportGenerator, ReportFactory
 
 
+@ReportFactory.register('html')
 class HTMLReportGenerator(ReportGenerator):
     """HTML report generator implementation."""
     

@@ -47,6 +47,10 @@ class Settings(BaseSettings):
     host: str = "0.0.0.0"
     port: int = 8000
 
+    # Pagination (centralized constants)
+    default_page_size: int = 100
+    max_page_size: int = 1000
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

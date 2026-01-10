@@ -1,23 +1,24 @@
-"""Grade endpoints."""
+"""Grade endpoints - Refactored to use repository pattern."""
 
 from typing import List, Optional
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from sqlalchemy.orm import selectinload
 from app.core.database import get_db
 from app.core.exceptions import NotFoundError, ForbiddenError
 from app.models.user import User, UserRole
 from app.models.grade import Grade
-from app.models.enrollment import Enrollment
-from app.schemas.grade import GradeCreate, GradeUpdate, GradeResponse, EnrollmentInfo
+from app.models.subject import Subject
+from app.schemas.grade import GradeCreate, GradeUpdate, GradeResponse
 from app.services.grade_service import GradeService
 from app.services.profesor_service import ProfesorService
 from app.services.estudiante_service import EstudianteService
+from app.repositories.grade_repository import GradeRepository
+from app.repositories.enrollment_repository import EnrollmentRepository
+from app.repositories.subject_repository import SubjectRepository
 from app.api.v1.dependencies import (
     get_current_active_user,
     require_admin_or_profesor,
-    require_estudiante,
 )
 
 router = APIRouter()
@@ -25,78 +26,12 @@ router = APIRouter()
 
 # ==================== Helper Functions ====================
 
-def serialize_grade_response(grade: Grade) -> GradeResponse:
-    """Serialize a Grade object to GradeResponse with enrollment info."""
-    grade_dict = {
-        "id": grade.id,
-        "enrollment_id": grade.enrollment_id,
-        "nota": grade.nota,
-        "periodo": grade.periodo,
-        "fecha": grade.fecha,
-        "observaciones": grade.observaciones,
-        "enrollment": None,
-    }
-    
-    # Serialize enrollment if it exists
-    if grade.enrollment:
-        grade_dict["enrollment"] = {
-            "id": grade.enrollment.id,
-            "estudiante_id": grade.enrollment.estudiante_id,
-            "subject_id": grade.enrollment.subject_id,
-        }
-        grade_dict["enrollment"] = EnrollmentInfo(**grade_dict["enrollment"])
-    
-    return GradeResponse(**grade_dict)
-
-
-async def load_grade_with_enrollment(
-    db: AsyncSession, grade_id: int
-) -> Grade:
-    """Load a grade with its enrollment relationship."""
-    stmt = (
-        select(Grade)
-        .where(Grade.id == grade_id)
-        .options(selectinload(Grade.enrollment))
-    )
-    result = await db.execute(stmt)
-    return result.scalar_one()
-
-
-async def load_grades_with_enrollment(
-    db: AsyncSession, grade_ids: Optional[List[int]] = None, 
-    enrollment_id: Optional[int] = None, subject_id: Optional[int] = None
-) -> List[Grade]:
-    """Load grades with enrollment relationships based on filters."""
-    stmt = select(Grade).options(selectinload(Grade.enrollment))
-    
-    if grade_ids:
-        stmt = stmt.where(Grade.id.in_(grade_ids))
-    elif enrollment_id:
-        stmt = stmt.where(Grade.enrollment_id == enrollment_id)
-    elif subject_id:
-        from app.repositories.enrollment_repository import EnrollmentRepository
-        repo = EnrollmentRepository(db)
-        enrollments = await repo.get_by_subject(subject_id)
-        enrollment_ids = [e.id for e in enrollments]
-        if enrollment_ids:
-            stmt = stmt.where(Grade.enrollment_id.in_(enrollment_ids))
-        else:
-            return []
-    # If no filters, return all grades (for admin)
-    
-    result = await db.execute(stmt)
-    return list(result.scalars().all())
-
-
-async def verify_profesor_subject_permission(
+async def _verify_profesor_subject_permission(
     db: AsyncSession, current_user: User, enrollment_id: int
 ) -> None:
     """Verify that a profesor has permission to access a subject via enrollment."""
-    from app.repositories.enrollment_repository import EnrollmentRepository
-    from app.repositories.subject_repository import SubjectRepository
-    
-    repo = EnrollmentRepository(db)
-    enrollment = await repo.get_by_id(enrollment_id)
+    enrollment_repo = EnrollmentRepository(db)
+    enrollment = await enrollment_repo.get_by_id(enrollment_id)
     
     if not enrollment:
         raise NotFoundError("Enrollment", enrollment_id)
@@ -108,7 +43,7 @@ async def verify_profesor_subject_permission(
         raise ForbiddenError("Cannot access grade for unassigned subject")
 
 
-async def verify_profesor_can_access_subject(
+async def _verify_profesor_can_access_subject(
     db: AsyncSession, current_user: User, subject_id: int
 ) -> None:
     """Verify that a profesor has access to a subject."""
@@ -143,12 +78,103 @@ async def create_grade(
             service = GradeService(db)
             grade = await service.create_grade(grade_data)
         
-        # Load enrollment relationship and serialize
-        grade_with_enrollment = await load_grade_with_enrollment(db, grade.id)
-        return serialize_grade_response(grade_with_enrollment)
+        # Load grade with enrollment using repository
+        grade_repo = GradeRepository(db)
+        grade_with_enrollment = await grade_repo.get_with_relations(grade.id)
+        
+        if not grade_with_enrollment:
+            raise NotFoundError("Grade", grade.id)
+        
+        # Serialize single grade (use batch function for consistency)
+        responses = await _serialize_grades_batch([grade_with_enrollment], db)
+        return responses[0] if responses else None
     except ValueError as e:
         error_type = ForbiddenError if current_user.role == UserRole.PROFESOR else NotFoundError
         raise error_type("Grade", str(e))
+
+
+async def _serialize_grades_batch(grades: List[Grade], db: AsyncSession) -> List[GradeResponse]:
+    """Serialize a batch of grades with efficient batch loading of relationships.
+    
+    This function loads all estudiante and subject relationships in batches
+    to avoid N+1 queries.
+    """
+    from app.schemas.grade import EnrollmentInfo, EstudianteBasicInfo, SubjectBasicInfo
+    
+    if not grades:
+        return []
+    
+    # Collect all unique estudiante_ids and subject_ids
+    unique_estudiante_ids = set()
+    unique_subject_ids = set()
+    
+    for grade in grades:
+        if grade.enrollment:
+            unique_estudiante_ids.add(grade.enrollment.estudiante_id)
+            unique_subject_ids.add(grade.enrollment.subject_id)
+    
+    # Batch load all estudiantes
+    estudiantes_map = {}
+    if unique_estudiante_ids:
+        estudiantes_stmt = select(User).where(User.id.in_(list(unique_estudiante_ids)))
+        estudiantes_result = await db.execute(estudiantes_stmt)
+        estudiantes_list = estudiantes_result.scalars().all()
+        estudiantes_map = {est.id: est for est in estudiantes_list}
+    
+    # Batch load all subjects
+    subjects_map = {}
+    if unique_subject_ids:
+        subjects_stmt = select(Subject).where(Subject.id.in_(list(unique_subject_ids)))
+        subjects_result = await db.execute(subjects_stmt)
+        subjects_list = subjects_result.scalars().all()
+        subjects_map = {subj.id: subj for subj in subjects_list}
+    
+    # Serialize each grade using batch-loaded maps
+    responses = []
+    for grade in grades:
+        response_data = {
+            "id": grade.id,
+            "enrollment_id": grade.enrollment_id,
+            "nota": grade.nota,
+            "periodo": grade.periodo,
+            "fecha": grade.fecha,
+            "observaciones": grade.observaciones,
+        }
+        
+        enrollment_info = None
+        if grade.enrollment:
+            # Get estudiante from batch-loaded map
+            estudiante_info = None
+            if grade.enrollment.estudiante_id in estudiantes_map:
+                estudiante = estudiantes_map[grade.enrollment.estudiante_id]
+                estudiante_info = EstudianteBasicInfo(
+                    id=estudiante.id,
+                    nombre=estudiante.nombre,
+                    apellido=estudiante.apellido,
+                    email=estudiante.email,
+                )
+            
+            # Get subject from batch-loaded map
+            subject_info = None
+            if grade.enrollment.subject_id in subjects_map:
+                subject = subjects_map[grade.enrollment.subject_id]
+                subject_info = SubjectBasicInfo(
+                    id=subject.id,
+                    nombre=subject.nombre,
+                    codigo_institucional=subject.codigo_institucional,
+                )
+            
+            enrollment_info = EnrollmentInfo(
+                id=grade.enrollment.id,
+                estudiante_id=grade.enrollment.estudiante_id,
+                subject_id=grade.enrollment.subject_id,
+                estudiante=estudiante_info,
+                subject=subject_info,
+            )
+        
+        responses.append(GradeResponse(**response_data, enrollment=enrollment_info))
+    
+    return responses
 
 
 async def _get_grades_as_estudiante(
@@ -158,32 +184,46 @@ async def _get_grades_as_estudiante(
     estudiante_service = EstudianteService(db, current_user)
     grades = await estudiante_service.get_grades_by_subject(subject_id)
     
-    # Load enrollment relationships and serialize
+    # Load grades with enrollment relationships using repository
+    grade_repo = GradeRepository(db)
     grade_ids = [grade.id for grade in grades]
-    grades_with_enrollment = await load_grades_with_enrollment(db, grade_ids=grade_ids)
-    return [serialize_grade_response(grade) for grade in grades_with_enrollment]
+    grades_with_enrollment = await grade_repo.get_many_with_relations(
+        grade_ids=grade_ids,
+        relations=['enrollment']
+    )
+    # Serialize grades with batch loading
+    return await _serialize_grades_batch(grades_with_enrollment, db)
 
 
 async def _get_grades_as_profesor(
     db: AsyncSession, current_user: User, subject_id: int, enrollment_id: Optional[int]
 ) -> List[GradeResponse]:
     """Get grades for a profesor."""
-    await verify_profesor_can_access_subject(db, current_user, subject_id)
+    await _verify_profesor_can_access_subject(db, current_user, subject_id)
     
-    grades = await load_grades_with_enrollment(
-        db, enrollment_id=enrollment_id, subject_id=subject_id
+    # Use repository to load grades with relations
+    grade_repo = GradeRepository(db)
+    grades = await grade_repo.get_many_with_relations(
+        enrollment_id=enrollment_id,
+        subject_id=subject_id,
+        relations=['enrollment']
     )
-    return [serialize_grade_response(grade) for grade in grades]
+    # Serialize grades with batch loading
+    return await _serialize_grades_batch(grades, db)
 
 
 async def _get_grades_as_admin(
     db: AsyncSession, subject_id: Optional[int], enrollment_id: Optional[int]
 ) -> List[GradeResponse]:
     """Get grades for an admin."""
-    grades = await load_grades_with_enrollment(
-        db, enrollment_id=enrollment_id, subject_id=subject_id
+    grade_repo = GradeRepository(db)
+    grades = await grade_repo.get_many_with_relations(
+        enrollment_id=enrollment_id,
+        subject_id=subject_id,
+        relations=['enrollment']
     )
-    return [serialize_grade_response(grade) for grade in grades]
+    # Serialize grades with batch loading
+    return await _serialize_grades_batch(grades, db)
 
 
 @router.get("", response_model=List[GradeResponse])
@@ -223,23 +263,22 @@ async def get_grade(
     current_user: User = Depends(get_current_active_user),
 ):
     """Get grade by ID."""
-    service = GradeService(db)
-    grade = await service.get_grade_by_id(grade_id)
+    grade_repo = GradeRepository(db)
+    grade = await grade_repo.get_with_relations(grade_id)
     
     if not grade:
         raise NotFoundError("Grade", grade_id)
     
     # Verify permissions
     if current_user.role == UserRole.ESTUDIANTE:
-        from app.repositories.enrollment_repository import EnrollmentRepository
-        repo = EnrollmentRepository(db)
-        enrollment = await repo.get_by_id(grade.enrollment_id)
+        enrollment_repo = EnrollmentRepository(db)
+        enrollment = await enrollment_repo.get_by_id(grade.enrollment_id)
         if enrollment and enrollment.estudiante_id != current_user.id:
             raise ForbiddenError("Cannot access other student's grades")
     
-    # Load enrollment relationship and serialize
-    grade_with_enrollment = await load_grade_with_enrollment(db, grade_id)
-    return serialize_grade_response(grade_with_enrollment)
+    # Serialize single grade (use batch function for consistency)
+    responses = await _serialize_grades_batch([grade], db)
+    return responses[0] if responses else None
 
 
 @router.put("/{grade_id}", response_model=GradeResponse)
@@ -250,25 +289,31 @@ async def update_grade(
     current_user: User = Depends(require_admin_or_profesor),
 ):
     """Update grade (Profesor or Admin only)."""
-    service = GradeService(db)
+    grade_repo = GradeRepository(db)
     
     # Get existing grade to verify permissions
-    existing_grade = await service.get_grade_by_id(grade_id)
+    existing_grade = await grade_repo.get_by_id(grade_id)
     if not existing_grade:
         raise NotFoundError("Grade", grade_id)
     
     # Verify profesor permissions
     if current_user.role == UserRole.PROFESOR:
-        await verify_profesor_subject_permission(
+        await _verify_profesor_subject_permission(
             db, current_user, existing_grade.enrollment_id
         )
     
-    # Update grade
-    grade = await service.update_grade(grade_id, grade_data)
+    # Update grade using service (business logic)
+    service = GradeService(db)
+    await service.update_grade(grade_id, grade_data)
     
-    # Load enrollment relationship and serialize
-    grade_with_enrollment = await load_grade_with_enrollment(db, grade_id)
-    return serialize_grade_response(grade_with_enrollment)
+    # Load updated grade with enrollment relationship
+    grade = await grade_repo.get_with_relations(grade_id)
+    if not grade:
+        raise NotFoundError("Grade", grade_id)
+    
+    # Serialize single grade (use batch function for consistency)
+    responses = await _serialize_grades_batch([grade], db)
+    return responses[0] if responses else None
 
 
 @router.delete("/{grade_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -278,20 +323,21 @@ async def delete_grade(
     current_user: User = Depends(require_admin_or_profesor),
 ):
     """Delete grade (Profesor or Admin only)."""
-    service = GradeService(db)
+    grade_repo = GradeRepository(db)
     
     # Get existing grade to verify permissions
-    existing_grade = await service.get_grade_by_id(grade_id)
+    existing_grade = await grade_repo.get_by_id(grade_id)
     if not existing_grade:
         raise NotFoundError("Grade", grade_id)
     
     # Verify profesor permissions
     if current_user.role == UserRole.PROFESOR:
-        await verify_profesor_subject_permission(
+        await _verify_profesor_subject_permission(
             db, current_user, existing_grade.enrollment_id
         )
     
-    # Delete grade
+    # Delete grade using service (business logic)
+    service = GradeService(db)
     deleted = await service.delete_grade(grade_id)
     if not deleted:
         raise NotFoundError("Grade", grade_id)

@@ -117,7 +117,7 @@ class EstudianteService:
         Returns:
             Report with content, filename, and content_type
         """
-        from app.factories.report_factory import ReportFactory
+        from app.factories import ReportFactory  # Import from __init__.py to ensure generators are registered
         
         enrollments = await self.enrollment_repo.get_by_estudiante(
             self.estudiante_user.id
