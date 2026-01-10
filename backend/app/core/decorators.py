@@ -164,10 +164,12 @@ def retry_on_db_lock(max_retries: int = 3, delay: float = 0.1):
                             )
                             await asyncio.sleep(delay * (attempt + 1))  # Exponential backoff
                             continue
-                    # If not a lock error, don't retry
+                        # If it's the last attempt and still a lock error, exit loop to raise
+                        break
+                    # If not a lock error, don't retry - raise immediately
                     raise
             
-            # All retries exhausted
+            # All retries exhausted (lines 171-172)
             logger.error(f"Max retries exceeded in {func.__name__}")
             raise last_exception
         
