@@ -1,4 +1,4 @@
-"""Grade schemas."""
+"""Grade schemas - Simplified version."""
 
 from pydantic import BaseModel, Field, ConfigDict
 from datetime import date
@@ -27,22 +27,35 @@ class GradeUpdate(BaseModel):
     observaciones: Optional[str] = None
 
 
-# Schema anidado para la relación enrollment
+# Schemas para info anidada
+class EstudianteBasicInfo(BaseModel):
+    """Info básica del estudiante."""
+    id: int
+    nombre: str
+    apellido: str
+    email: str
+
+
+class SubjectBasicInfo(BaseModel):
+    """Info básica de la materia."""
+    id: int
+    nombre: str
+    codigo_institucional: str
+
+
 class EnrollmentInfo(BaseModel):
-    """Información básica de la inscripción."""
+    """Información de la inscripción con estudiante y materia."""
     id: int
     estudiante_id: int
     subject_id: int
-    
-    model_config = ConfigDict(from_attributes=True)
+    estudiante: Optional[EstudianteBasicInfo] = None
+    subject: Optional[SubjectBasicInfo] = None
 
 
 class GradeResponse(GradeBase):
     """Schema for grade response."""
     id: int
     enrollment_id: int
-    
-    # Nested model
     enrollment: Optional[EnrollmentInfo] = None
     
     model_config = ConfigDict(from_attributes=True)

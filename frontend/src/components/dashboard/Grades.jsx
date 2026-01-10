@@ -60,6 +60,13 @@ const Grades = () => {
     try {
       setError('')
       const data = await gradeService.getAll(params)
+      console.log('📊 DATOS RECIBIDOS DEL BACKEND:', JSON.stringify(data, null, 2))
+      if (data.length > 0) {
+        console.log('📋 PRIMERA NOTA:', data[0])
+        console.log('👤 ENROLLMENT:', data[0].enrollment)
+        console.log('🎓 ESTUDIANTE:', data[0].enrollment?.estudiante)
+        console.log('📚 MATERIA:', data[0].enrollment?.subject)
+      }
       setGrades(data)
     } catch (err) {
       setError(err.message || 'Error al cargar notas')
