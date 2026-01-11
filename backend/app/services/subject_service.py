@@ -45,15 +45,20 @@ class SubjectService:
         if profesor.role != UserRole.PROFESOR:
             raise ValueError("User is not a Profesor")
         
-        # Check if codigo_institucional already exists
-        existing = await self.repository.get_by_codigo_institucional(
-            subject_data.codigo_institucional
-        )
-        if existing:
-            raise ValueError("Subject code already exists")
+        # Generate codigo_institucional if not provided
+        from app.utils.codigo_generator import generar_codigo_materia
+        codigo_institucional = subject_data.codigo_institucional
+        if not codigo_institucional:
+            codigo_institucional = await generar_codigo_materia(self.db, subject_data.nombre)
+        else:
+            # Check if provided codigo_institucional already exists
+            existing = await self.repository.get_by_codigo_institucional(codigo_institucional)
+            if existing:
+                raise ValueError("Subject code already exists")
         
         # Create subject
-        subject_dict = subject_data.model_dump()
+        subject_dict = subject_data.model_dump(exclude={'codigo_institucional'})
+        subject_dict['codigo_institucional'] = codigo_institucional
         return await self.repository.create(subject_dict)
     
     async def get_subject_by_id(self, subject_id: int) -> Subject | None:

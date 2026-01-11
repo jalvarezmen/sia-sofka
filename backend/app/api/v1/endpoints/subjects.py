@@ -12,7 +12,7 @@ from app.models.subject import Subject
 from app.schemas.subject import SubjectCreate, SubjectUpdate, SubjectResponse
 from app.services.admin_service import AdminService
 from app.services.subject_service import SubjectService
-from app.api.v1.dependencies import require_admin
+from app.api.v1.dependencies import require_admin, get_current_active_user
 from app.api.v1.serializers.subject_serializer import SubjectSerializer
 
 router = APIRouter()
@@ -39,21 +39,41 @@ async def get_subjects(
     skip: int = 0,
     limit: int = 100,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_admin),
+    current_user: User = Depends(get_current_active_user),
 ):
-    """Get all subjects (Admin only)."""
-    # Load subjects with profesor relationship
-    stmt = (
-        select(Subject)
-        .options(selectinload(Subject.profesor))
-        .offset(skip)
-        .limit(limit)
-    )
-    result = await db.execute(stmt)
-    subjects = result.scalars().all()
+    """Get subjects.
     
-    # Serialize using serializer
-    return SubjectSerializer.serialize_batch(subjects)
+    - Admin: can see all subjects
+    - Profesor: can see only their assigned subjects
+    """
+    from app.models.user import UserRole
+    from app.services.profesor_service import ProfesorService
+    from app.core.exceptions import ForbiddenError
+    
+    if current_user.role == UserRole.PROFESOR:
+        # Profesor: solo sus materias asignadas
+        profesor_service = ProfesorService(db, current_user)
+        subjects = await profesor_service.get_assigned_subjects()
+        # Cargar relación profesor si es necesario
+        for subject in subjects:
+            await db.refresh(subject, ["profesor"])
+        return SubjectSerializer.serialize_batch(subjects)
+    
+    elif current_user.role == UserRole.ADMIN:
+        # Admin: todas las materias (comportamiento actual)
+        stmt = (
+            select(Subject)
+            .options(selectinload(Subject.profesor))
+            .offset(skip)
+            .limit(limit)
+        )
+        result = await db.execute(stmt)
+        subjects = result.scalars().all()
+        return SubjectSerializer.serialize_batch(subjects)
+    
+    else:
+        # Estudiante u otro rol: no permitido
+        raise ForbiddenError("Not enough permissions")
 
 
 @router.get("/{subject_id}", response_model=SubjectResponse)

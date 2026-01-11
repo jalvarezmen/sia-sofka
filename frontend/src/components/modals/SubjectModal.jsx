@@ -69,9 +69,7 @@ const SubjectModal = ({ isOpen, onClose, subject, onSubmit }) => {
     const newErrors = {}
     
     if (!formData.nombre) newErrors.nombre = 'El nombre es requerido'
-    if (!formData.codigo_institucional) {
-      newErrors.codigo_institucional = 'El código institucional es requerido'
-    }
+    // codigo_institucional es opcional - se autogenera si no se proporciona
     if (!formData.numero_creditos) {
       newErrors.numero_creditos = 'El número de créditos es requerido'
     }
@@ -90,9 +88,15 @@ const SubjectModal = ({ isOpen, onClose, subject, onSubmit }) => {
     e.preventDefault()
     if (validate()) {
       const dataToSubmit = {
-        ...formData,
+        nombre: formData.nombre,
         numero_creditos: parseInt(formData.numero_creditos),
         profesor_id: parseInt(formData.profesor_id),
+        horario: formData.horario || null,
+        descripcion: formData.descripcion || null,
+      }
+      // Solo incluir codigo_institucional si se proporciona (no vacío)
+      if (formData.codigo_institucional && formData.codigo_institucional.trim()) {
+        dataToSubmit.codigo_institucional = formData.codigo_institucional.trim()
       }
       onSubmit(dataToSubmit)
     }
@@ -138,17 +142,18 @@ const SubjectModal = ({ isOpen, onClose, subject, onSubmit }) => {
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Código Institucional *
+                Código Institucional
+                <span className="text-gray-400 text-xs ml-1">(opcional - se autogenera si no se proporciona)</span>
               </label>
               <input
                 type="text"
                 name="codigo_institucional"
                 value={formData.codigo_institucional}
                 onChange={handleChange}
+                placeholder="Se generará automáticamente"
                 className={`w-full px-3 py-2 border rounded-md ${
                   errors.codigo_institucional ? 'border-red-500' : 'border-gray-300'
                 }`}
-                required
               />
               {errors.codigo_institucional && (
                 <p className="text-red-500 text-xs mt-1">{errors.codigo_institucional}</p>

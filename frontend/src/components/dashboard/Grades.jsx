@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { gradeService, subjectService } from '../../services/apiService'
+import { gradeService, subjectService, profesorService, estudianteService } from '../../services/apiService'
 import { useAuth } from '../../context/AuthContext'
 import { Plus, Edit, Trash2 } from 'lucide-react'
 import GradeModal from '../modals/GradeModal'
@@ -16,38 +16,81 @@ const Grades = () => {
   const [selectedGrade, setSelectedGrade] = useState(null)
   const [selectedSubjectId, setSelectedSubjectId] = useState(null)
   const [filterSubjectId, setFilterSubjectId] = useState('')
+  const [discoveredSubjects, setDiscoveredSubjects] = useState([]) // Materias descubiertas desde notas
+  const [currentSubject, setCurrentSubject] = useState(null) // Materia actual mostrada
 
   useEffect(() => {
     fetchData()
   }, [])
 
   useEffect(() => {
-    if (filterSubjectId) {
-      fetchGrades({ subject_id: parseInt(filterSubjectId) })
-    } else {
-      fetchGrades()
+    // Solo ejecutar automáticamente si NO es estudiante (estudiantes usan el botón Buscar)
+    if (user?.role !== 'Estudiante') {
+      if (filterSubjectId) {
+        fetchGrades({ subject_id: parseInt(filterSubjectId) })
+      } else if (user?.role === 'Admin') {
+        // Solo Admin puede ver todas las notas sin filtro
+        fetchGrades()
+      }
     }
-  }, [filterSubjectId])
+  }, [filterSubjectId, user?.role])
 
   const fetchData = async () => {
     try {
       setLoading(true)
       setError('')
       
-      // Si es profesor, obtener sus materias
+      // Si es profesor, obtener sus materias usando el servicio específico
       if (user?.role === 'Profesor') {
-        const subjectsData = await subjectService.getAll()
-        const mySubjects = subjectsData.filter((s) => s.profesor_id === user.id)
-        setSubjects(mySubjects)
-        if (mySubjects.length > 0) {
-          setFilterSubjectId(mySubjects[0].id.toString())
+        try {
+          const mySubjects = await profesorService.getAssignedSubjects(user.id)
+          if (mySubjects && mySubjects.length > 0) {
+            setSubjects(mySubjects)
+            setFilterSubjectId(mySubjects[0].id.toString())
+          } else {
+            setError('No tienes materias asignadas. Contacta al administrador.')
+            setSubjects([])
+          }
+        } catch (err) {
+          console.error('Error fetching profesor subjects:', err)
+          setError('No se pudieron cargar tus materias asignadas')
+          setSubjects([])
         }
+      } else if (user?.role === 'Estudiante') {
+        // Para estudiante, intentar cargar materias descubiertas desde localStorage
+        // o desde notas previas
+        const savedSubjects = localStorage.getItem(`estudiante_${user.id}_subjects`)
+        if (savedSubjects) {
+          try {
+            const parsed = JSON.parse(savedSubjects)
+            setSubjects(parsed)
+            setDiscoveredSubjects(parsed)
+            if (parsed.length > 0) {
+              setFilterSubjectId(parsed[0].id.toString())
+            }
+          } catch (e) {
+            console.warn('Error parsing saved subjects:', e)
+          }
+        }
+        setError('')
       } else {
-        const subjectsData = await subjectService.getAll()
-        setSubjects(subjectsData)
+        // Admin: obtener todas las materias
+        try {
+          const subjectsData = await subjectService.getAll()
+          setSubjects(subjectsData || [])
+        } catch (err) {
+          console.error('Error fetching subjects:', err)
+          setError('Error al cargar materias')
+          setSubjects([])
+        }
       }
       
-      await fetchGrades()
+      // Cargar notas iniciales
+      if (filterSubjectId) {
+        await fetchGrades({ subject_id: parseInt(filterSubjectId) })
+      } else if (user?.role === 'Admin') {
+        await fetchGrades()
+      }
     } catch (err) {
       setError(err.message || 'Error al cargar datos')
       console.error('Error fetching data:', err)
@@ -61,9 +104,62 @@ const Grades = () => {
       setError('')
       const data = await gradeService.getAll(params)
       setGrades(data)
+      
+      // Si es estudiante y hay notas, extraer materias descubiertas y establecer materia actual
+      if (user?.role === 'Estudiante' && data && data.length > 0) {
+        const newSubjects = []
+        const subjectMap = new Map()
+        let foundSubject = null
+        
+        data.forEach((grade) => {
+          if (grade.enrollment?.subject && !subjectMap.has(grade.enrollment.subject.id)) {
+            subjectMap.set(grade.enrollment.subject.id, grade.enrollment.subject)
+            newSubjects.push(grade.enrollment.subject)
+            // Establecer la materia actual (la primera que encontremos)
+            if (!foundSubject) {
+              foundSubject = grade.enrollment.subject
+            }
+          }
+        })
+        
+        // Establecer la materia actual para mostrar su información
+        if (foundSubject) {
+          setCurrentSubject(foundSubject)
+        }
+        
+        // Agregar nuevas materias descubiertas sin duplicar
+        setDiscoveredSubjects((prev) => {
+          const combined = [...prev]
+          newSubjects.forEach((subject) => {
+            if (!combined.find((s) => s.id === subject.id)) {
+              combined.push(subject)
+            }
+          })
+          // Guardar en localStorage para persistencia
+          if (user?.id) {
+            localStorage.setItem(`estudiante_${user.id}_subjects`, JSON.stringify(combined))
+          }
+          return combined
+        })
+        
+        // Actualizar también el estado de subjects para el selector
+        setSubjects((prev) => {
+          const combined = [...prev]
+          newSubjects.forEach((subject) => {
+            if (!combined.find((s) => s.id === subject.id)) {
+              combined.push(subject)
+            }
+          })
+          return combined
+        })
+      } else if (user?.role === 'Estudiante' && (!data || data.length === 0)) {
+        // Si no hay notas, limpiar la materia actual
+        setCurrentSubject(null)
+      }
     } catch (err) {
       setError(err.message || 'Error al cargar notas')
       console.error('Error fetching grades:', err)
+      setCurrentSubject(null)
     }
   }
 
@@ -123,36 +219,129 @@ const Grades = () => {
       <div className="flex justify-between items-center mb-6">
         <div>
           <h1 className="text-4xl font-bold bg-gradient-to-r from-purple-600 to-purple-800 bg-clip-text text-transparent mb-1">
-            Notas
+            {user?.role === 'Estudiante' ? 'Mis Notas' : 'Notas'}
           </h1>
-          <p className="text-gray-600 text-sm">Gestiona las calificaciones académicas</p>
+          <p className="text-gray-600 text-sm">
+            {user?.role === 'Estudiante' 
+              ? 'Consulta tus calificaciones por materia'
+              : 'Gestiona las calificaciones académicas'}
+          </p>
         </div>
-        <button
-          onClick={handleCreate}
-          className="flex items-center space-x-2 px-5 py-3 bg-gradient-to-r from-purple-600 to-purple-700 text-white rounded-xl hover:from-purple-700 hover:to-purple-800 shadow-lg hover:shadow-xl transition-all duration-200 font-semibold transform hover:scale-105"
-        >
-          <Plus className="w-5 h-5" />
-          <span>Nueva Nota</span>
-        </button>
+        {(user?.role === 'Admin' || user?.role === 'Profesor') && (
+          <button
+            onClick={handleCreate}
+            className="flex items-center space-x-2 px-5 py-3 bg-gradient-to-r from-purple-600 to-purple-700 text-white rounded-xl hover:from-purple-700 hover:to-purple-800 shadow-lg hover:shadow-xl transition-all duration-200 font-semibold transform hover:scale-105"
+          >
+            <Plus className="w-5 h-5" />
+            <span>Nueva Nota</span>
+          </button>
+        )}
       </div>
 
-      {subjects.length > 0 && (
+      {user?.role === 'Estudiante' ? (
+        <div className="mb-4 space-y-4">
+          {/* Selector de materias descubiertas */}
+          {subjects.length > 0 && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Seleccionar Materia Asignada <span className="text-gray-400 text-xs">(opcional)</span>
+              </label>
+              <select
+                value={filterSubjectId}
+                onChange={(e) => {
+                  const selectedId = e.target.value
+                  setFilterSubjectId(selectedId)
+                  if (selectedId) {
+                    // Establecer la materia actual desde el selector
+                    const selectedSubject = subjects.find((s) => s.id === parseInt(selectedId))
+                    if (selectedSubject) {
+                      setCurrentSubject(selectedSubject)
+                    }
+                    // Buscar las notas de esa materia
+                    fetchGrades({ subject_id: parseInt(selectedId) })
+                  } else {
+                    setGrades([])
+                    setCurrentSubject(null)
+                  }
+                }}
+                className="w-full px-4 py-2.5 border-2 border-purple-200 rounded-xl focus:border-purple-500 focus:ring-2 focus:ring-purple-200 outline-none transition-all duration-200 bg-white text-gray-700 font-medium"
+              >
+                <option value="">Selecciona una materia descubierta</option>
+                {subjects.map((subject) => (
+                  <option key={subject.id} value={subject.id}>
+                    {subject.nombre} - {subject.codigo_institucional}
+                  </option>
+                ))}
+              </select>
+              <p className="mt-1 text-xs text-gray-500">
+                Materias que has consultado anteriormente
+              </p>
+            </div>
+          )}
+          
+          {/* Campo para ingresar ID manualmente */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Ingresar ID de Materia Manualmente <span className="text-red-500 ml-1">*</span>
+            </label>
+            <div className="flex space-x-2">
+              <input
+                type="number"
+                value={filterSubjectId}
+                onChange={(e) => setFilterSubjectId(e.target.value)}
+                onKeyPress={(e) => {
+                  if (e.key === 'Enter' && filterSubjectId) {
+                    fetchGrades({ subject_id: parseInt(filterSubjectId) })
+                  }
+                }}
+                placeholder="Ej: 1, 2, 3..."
+                className="flex-1 px-4 py-2.5 border-2 border-purple-200 rounded-xl focus:border-purple-500 focus:ring-2 focus:ring-purple-200 outline-none transition-all duration-200 bg-white text-gray-700 font-medium"
+                min="1"
+              />
+              <button
+                onClick={() => {
+                  if (filterSubjectId) {
+                    fetchGrades({ subject_id: parseInt(filterSubjectId) })
+                  } else {
+                    setError('Por favor ingresa un ID de materia')
+                  }
+                }}
+                disabled={!filterSubjectId}
+                className="px-6 py-2.5 bg-gradient-to-r from-purple-600 to-purple-700 text-white rounded-xl hover:from-purple-700 hover:to-purple-800 shadow-lg hover:shadow-xl transition-all duration-200 font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Buscar
+              </button>
+            </div>
+            <p className="mt-1 text-xs text-gray-500">
+              Ingresa el ID de la materia para buscar tus notas. Una vez que veas tus notas, la materia se guardará automáticamente.
+            </p>
+          </div>
+        </div>
+      ) : subjects.length > 0 ? (
         <div className="mb-4">
           <label className="block text-sm font-medium text-gray-700 mb-2">
             Filtrar por Materia
+            {user?.role !== 'Admin' && <span className="text-red-500 ml-1">*</span>}
           </label>
           <select
             value={filterSubjectId}
             onChange={(e) => setFilterSubjectId(e.target.value)}
             className="px-4 py-2.5 border-2 border-purple-200 rounded-xl focus:border-purple-500 focus:ring-2 focus:ring-purple-200 outline-none transition-all duration-200 bg-white text-gray-700 font-medium"
+            required={user?.role !== 'Admin'}
           >
-            <option value="">Todas las materias</option>
+            {user?.role === 'Admin' && <option value="">Todas las materias</option>}
             {subjects.map((subject) => (
               <option key={subject.id} value={subject.id}>
                 {subject.nombre} - {subject.codigo_institucional}
               </option>
             ))}
           </select>
+        </div>
+      ) : null}
+      
+      {user?.role === 'Estudiante' && !filterSubjectId && (
+        <div className="bg-blue-50 border-l-4 border-blue-500 text-blue-700 px-4 py-3 rounded-lg mb-4 shadow-md">
+          <p className="font-medium">Ingresa el ID de una materia para ver tus notas</p>
         </div>
       )}
 
@@ -165,6 +354,31 @@ const Grades = () => {
       {success && (
         <div className="bg-green-50 border-l-4 border-green-500 text-green-700 px-4 py-3 rounded-lg mb-4 shadow-md">
           <p className="font-medium">{success}</p>
+        </div>
+      )}
+
+      {/* Información de la Materia para Estudiante */}
+      {user?.role === 'Estudiante' && currentSubject && (
+        <div className="bg-gradient-to-r from-purple-600 to-purple-700 rounded-2xl shadow-lg p-6 mb-6 text-white">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-2xl font-bold mb-2">{currentSubject.nombre}</h2>
+              <div className="flex flex-wrap gap-4 text-sm text-purple-100">
+                <span><strong>Código:</strong> {currentSubject.codigo_institucional}</span>
+                <span><strong>Créditos:</strong> {currentSubject.numero_creditos}</span>
+                {currentSubject.horario && (
+                  <span><strong>Horario:</strong> {currentSubject.horario}</span>
+                )}
+              </div>
+              {currentSubject.descripcion && (
+                <p className="mt-3 text-purple-100">{currentSubject.descripcion}</p>
+              )}
+            </div>
+            <div className="text-right">
+              <div className="text-3xl font-bold">{grades.length}</div>
+              <div className="text-sm text-purple-200">Notas registradas</div>
+            </div>
+          </div>
         </div>
       )}
 
@@ -187,16 +401,20 @@ const Grades = () => {
               <th className="px-6 py-4 text-left text-xs font-semibold text-white uppercase tracking-wider">
                 Fecha
               </th>
-              <th className="px-6 py-4 text-left text-xs font-semibold text-white uppercase tracking-wider">
-                Acciones
-              </th>
+              {(user?.role === 'Admin' || user?.role === 'Profesor') && (
+                <th className="px-6 py-4 text-left text-xs font-semibold text-white uppercase tracking-wider">
+                  Acciones
+                </th>
+              )}
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
             {grades.length === 0 ? (
               <tr>
-                <td colSpan="6" className="px-6 py-4 text-center text-gray-500">
-                  No hay notas registradas
+                <td colSpan={user?.role === 'Estudiante' ? 5 : 6} className="px-6 py-4 text-center text-gray-500">
+                  {user?.role === 'Estudiante' && filterSubjectId
+                    ? 'No hay notas registradas para esta materia'
+                    : 'No hay notas registradas'}
                 </td>
               </tr>
             ) : (
@@ -224,13 +442,15 @@ const Grades = () => {
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                     <div className="flex items-center space-x-3">
-                      <button
-                        onClick={() => handleEdit(grade)}
-                        className="p-2 text-purple-600 hover:text-white hover:bg-purple-600 rounded-lg transition-all duration-200 hover:scale-110"
-                        title="Editar"
-                      >
-                        <Edit className="w-5 h-5" />
-                      </button>
+                      {(user?.role === 'Admin' || user?.role === 'Profesor') && (
+                        <button
+                          onClick={() => handleEdit(grade)}
+                          className="p-2 text-purple-600 hover:text-white hover:bg-purple-600 rounded-lg transition-all duration-200 hover:scale-110"
+                          title="Editar"
+                        >
+                          <Edit className="w-5 h-5" />
+                        </button>
+                      )}
                       {user?.role === 'Admin' && (
                         <button
                           onClick={() => handleDelete(grade.id)}

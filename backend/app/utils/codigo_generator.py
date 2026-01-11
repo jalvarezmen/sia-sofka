@@ -4,6 +4,7 @@ from datetime import datetime
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from app.models.user import User
+from app.models.subject import Subject
 
 
 async def generar_codigo_institucional(
@@ -39,5 +40,48 @@ async def generar_codigo_institucional(
     sequential = str(count + 1).zfill(4)
     
     return f"{prefix}-{current_year}-{sequential}"
+
+
+async def generar_codigo_materia(
+    db: AsyncSession, nombre_materia: str
+) -> str:
+    """Generate institutional code for a subject based on name.
+    
+    Args:
+        db: Database session
+        nombre_materia: Subject name
+    
+    Returns:
+        Generated institutional code in format: {PREFIX}-{SEQUENTIAL}
+        where PREFIX is the first 3-4 letters of the subject name (uppercase)
+    """
+    # Generate prefix from first letters of subject name
+    # Remove common words and get first meaningful word
+    palabras_ignorar = {"de", "la", "el", "y", "en", "con", "para", "por"}
+    palabras = nombre_materia.upper().split()
+    palabras_importantes = [p for p in palabras if p not in palabras_ignorar]
+    
+    if palabras_importantes:
+        primera_palabra = palabras_importantes[0]
+        # Take first 3-4 letters, max 4
+        prefix = primera_palabra[:4] if len(primera_palabra) >= 4 else primera_palabra.ljust(3, 'X')[:3]
+        # Remove special characters, keep only letters
+        prefix = ''.join(c for c in prefix if c.isalpha())
+        if len(prefix) < 3:
+            prefix = (prefix + 'XXX')[:3]
+    else:
+        prefix = "MAT"
+    
+    # Get the count of subjects with the same prefix
+    stmt = select(func.count(Subject.id)).where(
+        Subject.codigo_institucional.like(f"{prefix}-%")
+    )
+    result = await db.execute(stmt)
+    count = result.scalar() or 0
+    
+    # Generate sequential number with 3 digits
+    sequential = str(count + 1).zfill(3)
+    
+    return f"{prefix}-{sequential}"
 
 

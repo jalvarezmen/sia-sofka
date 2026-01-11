@@ -182,3 +182,186 @@ export const profileService = {
   },
 }
 
+// ==================== PROFESOR ====================
+export const profesorService = {
+  /**
+   * Obtiene las materias asignadas al profesor
+   * Ahora el backend permite a los profesores acceder a /subjects y automáticamente
+   * retorna solo sus materias asignadas
+   */
+  getAssignedSubjects: async (profesorId) => {
+    try {
+      // El backend ahora retorna automáticamente solo las materias asignadas al profesor
+      const response = await api.get('/subjects')
+      // El backend ya filtra por profesor_id, pero verificamos por seguridad
+      const subjects = response.data || []
+      // Verificar que todas las materias pertenezcan al profesor (doble verificación)
+      return subjects.filter((subject) => subject.profesor_id === profesorId)
+    } catch (error) {
+      console.error('Error getting assigned subjects:', error)
+      // Si falla, retornar array vacío
+      if (error.response?.status === 403 || error.response?.status === 401) {
+        console.warn('No se tienen permisos para acceder a /subjects.')
+        return []
+      }
+      throw error
+    }
+  },
+
+  /**
+   * Obtiene los estudiantes inscritos en una materia
+   * Usa /grades?subject_id={id} para obtener las notas y extraer estudiantes únicos
+   */
+  getStudentsBySubject: async (subjectId) => {
+    try {
+      // Obtener notas de la materia (requiere subject_id para profesor)
+      const grades = await gradeService.getAll({ subject_id: subjectId })
+      // Extraer estudiantes únicos
+      const students = []
+      const studentIds = new Set()
+      
+      for (const grade of grades) {
+        const estudiante = grade.enrollment?.estudiante
+        if (estudiante && !studentIds.has(estudiante.id)) {
+          studentIds.add(estudiante.id)
+          students.push(estudiante)
+        }
+      }
+      
+      return students
+    } catch (error) {
+      console.error('Error getting students by subject:', error)
+      // Si falla, retornar array vacío en lugar de lanzar error
+      if (error.response?.status === 403 || error.response?.status === 401) {
+        console.warn('No se tienen permisos para acceder a las notas de esta materia.')
+        return []
+      }
+      throw error
+    }
+  },
+
+  /**
+   * Obtiene las notas de una materia con información de estudiantes
+   */
+  getGradesBySubject: async (subjectId, enrollmentId = null) => {
+    const params = { subject_id: subjectId }
+    if (enrollmentId) {
+      params.enrollment_id = enrollmentId
+    }
+    return await gradeService.getAll(params)
+  },
+}
+
+// ==================== ESTUDIANTE ====================
+export const estudianteService = {
+  /**
+   * Obtiene las materias inscritas del estudiante
+   * Intenta acceder a /enrollments y filtra por estudiante_id
+   * Si falla (403), intenta inferir desde las notas
+   */
+  getMyEnrollments: async (estudianteId) => {
+    // NO intentar acceder a /enrollments porque requiere Admin y genera error 403
+    // Retornar array vacío directamente para evitar errores en consola
+    // El estudiante puede ver sus notas usando /grades?subject_id={id} pero necesita conocer el subject_id
+    // La mejor solución sería que el backend proporcione un endpoint específico para estudiantes
+    return []
+  },
+
+  /**
+   * Obtiene las materias del estudiante desde las notas que ya tiene
+   * Extrae las materias únicas desde las notas obtenidas previamente
+   */
+  getMySubjectsFromGrades: async (estudianteId, knownSubjectIds = []) => {
+    // Si no hay subject_ids conocidos, retornar array vacío
+    if (!knownSubjectIds || knownSubjectIds.length === 0) {
+      return []
+    }
+    
+    const mySubjects = []
+    const subjectMap = new Map()
+    
+    // Para cada subject_id conocido, intentar obtener notas y extraer la materia
+    for (const subjectId of knownSubjectIds) {
+      try {
+        const grades = await gradeService.getAll({ subject_id: subjectId })
+        // Filtrar solo las notas del estudiante
+        const myGrades = grades.filter(
+          (g) => g.enrollment?.estudiante_id === estudianteId
+        )
+        
+        // Si tiene notas, extraer la materia
+        if (myGrades.length > 0 && myGrades[0].enrollment?.subject) {
+          const subject = myGrades[0].enrollment.subject
+          if (!subjectMap.has(subject.id)) {
+            subjectMap.set(subject.id, {
+              ...subject,
+              enrollment: myGrades[0].enrollment,
+            })
+          }
+        }
+      } catch (err) {
+        // Silenciar errores individuales
+        console.warn(`No se pudieron obtener notas para materia ${subjectId}:`, err)
+      }
+    }
+    
+    return Array.from(subjectMap.values())
+  },
+
+  /**
+   * Obtiene las notas del estudiante en una materia específica
+   */
+  getGradesBySubject: async (subjectId) => {
+    return await gradeService.getAll({ subject_id: subjectId })
+  },
+
+  /**
+   * Obtiene el estado de una materia para el estudiante
+   * Calcula promedio y obtiene información de la materia
+   */
+  getSubjectStatus: async (subjectId, estudianteId) => {
+    try {
+      // Obtener notas del estudiante en la materia (requiere subject_id para estudiante)
+      const grades = await gradeService.getAll({ subject_id: subjectId })
+      
+      // Filtrar solo las notas del estudiante
+      const myGrades = grades.filter(
+        (grade) => grade.enrollment?.estudiante_id === estudianteId
+      )
+      
+      // Calcular promedio
+      let promedio = null
+      if (myGrades.length > 0) {
+        const sum = myGrades.reduce((acc, grade) => acc + parseFloat(grade.nota || 0), 0)
+        promedio = sum / myGrades.length
+      }
+      
+      // Obtener información de la materia desde las notas
+      const subject = myGrades[0]?.enrollment?.subject || null
+      const enrollment = myGrades[0]?.enrollment || null
+      
+      return {
+        subject,
+        enrollment,
+        grades: myGrades,
+        promedio,
+        totalGrades: myGrades.length,
+      }
+    } catch (error) {
+      console.error('Error getting subject status:', error)
+      // Si falla, retornar estructura vacía en lugar de lanzar error
+      if (error.response?.status === 403 || error.response?.status === 401) {
+        console.warn('No se tienen permisos para acceder a las notas de esta materia.')
+        return {
+          subject: null,
+          enrollment: null,
+          grades: [],
+          promedio: null,
+          totalGrades: 0,
+        }
+      }
+      throw error
+    }
+  },
+}
+

@@ -17,10 +17,10 @@ const Sidebar = () => {
   const menuItems = [
     { path: '/', label: 'Dashboard', icon: LayoutDashboard },
     { path: '/users', label: 'Usuarios', icon: Users, roles: ['Admin'] },
-    { path: '/subjects', label: 'Materias', icon: BookOpen, roles: ['Admin'] },
+    { path: '/subjects', label: 'Materias', icon: BookOpen, roles: ['Admin', 'Profesor', 'Estudiante'] },
     { path: '/enrollments', label: 'Inscripciones', icon: UserCheck, roles: ['Admin'] },
     { path: '/grades', label: 'Notas', icon: GraduationCap },
-    { path: '/reports', label: 'Reportes', icon: FileText, roles: ['Admin'] },
+    { path: '/reports', label: 'Reportes', icon: FileText },
   ]
 
   const filteredMenuItems = menuItems.filter((item) => {

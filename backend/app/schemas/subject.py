@@ -7,7 +7,7 @@ from typing import Optional
 class SubjectBase(BaseModel):
     """Base subject schema."""
     nombre: str = Field(..., min_length=1, max_length=200)
-    codigo_institucional: str = Field(..., min_length=1, max_length=50)
+    codigo_institucional: Optional[str] = Field(None, min_length=1, max_length=50)
     numero_creditos: int = Field(..., gt=0, le=10)
     horario: Optional[str] = None
     descripcion: Optional[str] = None
