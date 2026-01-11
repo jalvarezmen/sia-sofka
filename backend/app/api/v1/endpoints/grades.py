@@ -89,8 +89,10 @@ async def create_grade(
         responses = await _serialize_grades_batch([grade_with_enrollment], db)
         return responses[0] if responses else None
     except ValueError as e:
-        error_type = ForbiddenError if current_user.role == UserRole.PROFESOR else NotFoundError
-        raise error_type("Grade", str(e))
+        if current_user.role == UserRole.PROFESOR:
+            raise ForbiddenError(str(e))
+        else:
+            raise NotFoundError("Grade", str(e))
 
 
 async def _serialize_grades_batch(grades: List[Grade], db: AsyncSession) -> List[GradeResponse]:

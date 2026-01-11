@@ -222,6 +222,67 @@ async def test_estudiante_service_get_subject_status(db_session: AsyncSession):
 
 
 @pytest.mark.asyncio
+async def test_estudiante_service_get_subject_status_without_grades(db_session: AsyncSession):
+    """Test EstudianteService get_subject_status handles enrollment without grades (covers lines 101-102)."""
+    codigo_est = await generar_codigo_institucional(db_session, "Estudiante")
+    estudiante = User(
+        email="est_no_grades@example.com",
+        password_hash=get_password_hash("pass"),
+        role=UserRole.ESTUDIANTE,
+        nombre="Est",
+        apellido="Test",
+        codigo_institucional=codigo_est,
+        fecha_nacimiento=date(2000, 1, 1),
+    )
+    db_session.add(estudiante)
+    
+    codigo_prof = await generar_codigo_institucional(db_session, "Profesor")
+    profesor = User(
+        email="prof@example.com",
+        password_hash=get_password_hash("pass"),
+        role=UserRole.PROFESOR,
+        nombre="Prof",
+        apellido="Test",
+        codigo_institucional=codigo_prof,
+        fecha_nacimiento=date(1980, 1, 1),
+    )
+    db_session.add(profesor)
+    await db_session.commit()
+    await db_session.refresh(estudiante)
+    await db_session.refresh(profesor)
+    
+    subject = Subject(
+        nombre="Matemáticas",
+        codigo_institucional="MAT-101",
+        numero_creditos=3,
+        horario="Lunes 8:00",
+        profesor_id=profesor.id,
+    )
+    db_session.add(subject)
+    await db_session.commit()
+    await db_session.refresh(subject)
+    
+    enrollment = Enrollment(
+        estudiante_id=estudiante.id,
+        subject_id=subject.id,
+    )
+    db_session.add(enrollment)
+    await db_session.commit()
+    await db_session.refresh(enrollment)
+    
+    # No grades created - calculate_average will raise ValueError
+    
+    service = EstudianteService(db_session, estudiante)
+    status = await service.get_subject_status(subject.id)
+    
+    # Should return status with average = None (ValueError caught, líneas 101-102)
+    assert status["subject"].id == subject.id
+    assert status["enrollment"].id == enrollment.id
+    assert len(status["grades"]) == 0
+    assert status["average"] is None
+
+
+@pytest.mark.asyncio
 async def test_estudiante_service_cannot_access_other_student_grades(db_session: AsyncSession):
     """Test EstudianteService cannot access other student's grades."""
     codigo_est1 = await generar_codigo_institucional(db_session, "Estudiante")
@@ -286,8 +347,11 @@ async def test_estudiante_service_cannot_access_other_student_grades(db_session:
     
     service = EstudianteService(db_session, estudiante1)  # estudiante1 trying to access
     
-    # Should fail because estudiante1 is not enrolled
-    with pytest.raises(ValueError):
+    # Should fail because estudiante1 is not enrolled (covers línea 68 y 90)
+    with pytest.raises(ValueError, match="Estudiante is not enrolled"):
+        await service.get_grades_by_subject(subject.id)
+    
+    with pytest.raises(ValueError, match="Estudiante is not enrolled"):
         await service.get_subject_status(subject.id)
 
 
