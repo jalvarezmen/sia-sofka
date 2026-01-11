@@ -1,14 +1,19 @@
-"""Subject endpoints."""
+"""Subject endpoints - Refactored to use repository pattern and serializers."""
 
 from typing import List
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
+from sqlalchemy import select
 from app.core.database import get_db
 from app.core.exceptions import NotFoundError, ValidationError
 from app.models.user import User
+from app.models.subject import Subject
 from app.schemas.subject import SubjectCreate, SubjectUpdate, SubjectResponse
 from app.services.admin_service import AdminService
+from app.services.subject_service import SubjectService
 from app.api.v1.dependencies import require_admin
+from app.api.v1.serializers.subject_serializer import SubjectSerializer
 
 router = APIRouter()
 
@@ -37,11 +42,7 @@ async def get_subjects(
     current_user: User = Depends(require_admin),
 ):
     """Get all subjects (Admin only)."""
-    from sqlalchemy.orm import selectinload
-    from sqlalchemy import select
-    from app.models.subject import Subject
-    from app.schemas.subject import SubjectResponse
-    
+    # Load subjects with profesor relationship
     stmt = (
         select(Subject)
         .options(selectinload(Subject.profesor))
@@ -51,34 +52,8 @@ async def get_subjects(
     result = await db.execute(stmt)
     subjects = result.scalars().all()
     
-    # Serializar manualmente para asegurar que las relaciones se incluyan
-    serialized_subjects = []
-    for subject in subjects:
-        subject_dict = {
-            "id": subject.id,
-            "nombre": subject.nombre,
-            "codigo_institucional": subject.codigo_institucional,
-            "numero_creditos": subject.numero_creditos,
-            "horario": subject.horario,
-            "descripcion": subject.descripcion,
-            "profesor_id": subject.profesor_id,
-            "profesor": None,
-        }
-        
-        # Incluir profesor si está cargado
-        if subject.profesor:
-            from app.schemas.subject import ProfesorInfo
-            subject_dict["profesor"] = ProfesorInfo(
-                id=subject.profesor.id,
-                nombre=subject.profesor.nombre,
-                apellido=subject.profesor.apellido,
-                codigo_institucional=subject.profesor.codigo_institucional,
-                email=subject.profesor.email,
-            )
-        
-        serialized_subjects.append(SubjectResponse(**subject_dict))
-    
-    return serialized_subjects
+    # Serialize using serializer
+    return SubjectSerializer.serialize_batch(subjects)
 
 
 @router.get("/{subject_id}", response_model=SubjectResponse)
@@ -88,8 +63,6 @@ async def get_subject(
     current_user: User = Depends(require_admin),
 ):
     """Get subject by ID (Admin only)."""
-    from app.services.subject_service import SubjectService
-    
     service = SubjectService(db)
     subject = await service.get_subject_by_id(subject_id)
     

@@ -1,4 +1,4 @@
-"""User endpoints."""
+"""User endpoints - Refactored to use services directly."""
 
 from typing import List
 from fastapi import APIRouter, Depends, status
@@ -8,7 +8,8 @@ from app.core.exceptions import NotFoundError, ValidationError
 from app.models.user import User, UserRole
 from app.schemas.user import UserCreate, UserUpdate, UserResponse
 from app.services.admin_service import AdminService
-from app.api.v1.dependencies import require_admin, get_current_active_user
+from app.services.user_service import UserService
+from app.api.v1.dependencies import require_admin
 
 router = APIRouter()
 
@@ -42,9 +43,9 @@ async def get_users(
     current_user: User = Depends(require_admin),
 ):
     """Get all users (Admin only)."""
-    admin_service = AdminService(db, current_user)
-    estudiantes = await admin_service.get_all_estudiantes(skip, limit)
-    profesores = await admin_service.get_all_profesores(skip, limit)
+    user_service = UserService(db)
+    estudiantes = await user_service.get_users_by_role(UserRole.ESTUDIANTE.value, skip, limit)
+    profesores = await user_service.get_users_by_role(UserRole.PROFESOR.value, skip, limit)
     return list(estudiantes) + list(profesores)
 
 
@@ -55,8 +56,6 @@ async def get_user(
     current_user: User = Depends(require_admin),
 ):
     """Get user by ID (Admin only)."""
-    from app.services.user_service import UserService
-    
     user_service = UserService(db)
     user = await user_service.get_user_by_id(user_id)
     

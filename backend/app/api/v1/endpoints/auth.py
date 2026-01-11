@@ -1,4 +1,4 @@
-"""Authentication endpoints."""
+"""Authentication endpoints - Refactored to use services."""
 
 from datetime import timedelta
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -6,18 +6,17 @@ from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.core.database import get_db
-from app.core.security import verify_password, get_password_hash, create_access_token
+from app.core.security import verify_password, create_access_token
 from app.core.config import settings
 from app.core.rate_limit import rate_limit
-from app.models.user import User, UserRole
+from app.models.user import User
 from app.schemas.token import Token
 from app.schemas.user import UserCreate, UserResponse
+from app.services.user_service import UserService
 from app.api.v1.dependencies import (
     get_current_active_user,
     require_admin,
 )
-from app.utils.codigo_generator import generar_codigo_institucional
-from datetime import date
 
 router = APIRouter()
 
@@ -79,45 +78,31 @@ async def register(
         Created user
     
     Raises:
-        HTTPException: If email already exists
+        ConflictError: If email already exists
+        ValidationError: If user data is invalid
     """
-    # Check if user already exists
-    stmt = select(User).where(User.email == user_data.email)
-    result = await db.execute(stmt)
-    existing_user = result.scalar_one_or_none()
+    user_service = UserService(db)
     
-    if existing_user:
+    try:
+        # Create user using service (handles code generation, age calculation, and duplicate check)
+        user = await user_service.create_user(user_data)
+        return user
+    except ValueError as e:
+        # UserService.create_user raises ValueError for duplicate email
+        if "already registered" in str(e).lower() or "email" in str(e).lower():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=str(e),
+            )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Email already registered",
+            detail=str(e),
         )
-    
-    # Generate institutional code
-    codigo = await generar_codigo_institucional(db, user_data.role.value)
-    
-    # Create user
-    user = User(
-        email=user_data.email,
-        password_hash=get_password_hash(user_data.password),
-        role=user_data.role,
-        nombre=user_data.nombre,
-        apellido=user_data.apellido,
-        codigo_institucional=codigo,
-        fecha_nacimiento=user_data.fecha_nacimiento,
-        numero_contacto=user_data.numero_contacto,
-        programa_academico=user_data.programa_academico,
-        ciudad_residencia=user_data.ciudad_residencia,
-        area_ensenanza=user_data.area_ensenanza,
-    )
-    
-    # Calculate age
-    user.edad = user.calcular_edad()
-    
-    db.add(user)
-    await db.commit()
-    await db.refresh(user)
-    
-    return user
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Error creating user: {str(e)}",
+        )
 
 
 @router.get("/me", response_model=UserResponse)
