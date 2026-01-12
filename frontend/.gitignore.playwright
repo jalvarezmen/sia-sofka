@@ -1,0 +1,13 @@
+# Playwright
+test-results/
+playwright-report/
+playwright/.cache/
+playwright-results.json
+
+# Screenshots y videos generados por tests
+screenshots/
+videos/
+traces/
+
+# Auth state files
+auth/*.json
