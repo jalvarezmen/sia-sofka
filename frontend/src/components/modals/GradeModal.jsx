@@ -52,45 +52,35 @@ const GradeModal = ({ isOpen, onClose, grade, subjectId, onSubmit }) => {
     try {
       setLoading(true)
       
-      // Si es profesor, obtener enrollments desde las notas
+      // Usar el nuevo endpoint para obtener enrollments de la materia
       if (user?.role === 'Profesor') {
         try {
-          // Obtener notas de la materia para extraer enrollments
-          const grades = await profesorService.getGradesBySubject(subjectId)
-          const enrollmentMap = new Map()
-          
-          // Extraer enrollments únicos de las notas
-          grades.forEach((grade) => {
-            if (grade.enrollment && !enrollmentMap.has(grade.enrollment.id)) {
-              enrollmentMap.set(grade.enrollment.id, grade.enrollment)
-            }
-          })
-          
-          setEnrollments(Array.from(enrollmentMap.values()))
+          // Usar el endpoint específico para enrollments de la materia
+          const enrollments = await profesorService.getEnrollmentsBySubject(subjectId)
+          setEnrollments(enrollments || [])
         } catch (err) {
-          console.error('Error fetching enrollments from grades:', err)
-          // Si falla, intentar obtener enrollments directamente (solo Admin)
-          if (user?.role === 'Admin') {
-            try {
-              const data = await enrollmentService.getAll()
-              const filtered = data.filter((e) => e.subject_id === subjectId)
-              setEnrollments(filtered)
-            } catch (adminErr) {
-              console.error('Error fetching enrollments as admin:', adminErr)
-              setEnrollments([])
-            }
-          } else {
+          console.error('Error fetching enrollments by subject:', err)
+          setEnrollments([])
+        }
+      } else if (user?.role === 'Admin') {
+        // Para Admin, usar el endpoint de enrollments por materia
+        try {
+          const enrollments = await profesorService.getEnrollmentsBySubject(subjectId)
+          setEnrollments(enrollments || [])
+        } catch (err) {
+          console.error('Error fetching enrollments by subject:', err)
+          // Fallback: obtener todos y filtrar
+          try {
+            const data = await enrollmentService.getAll()
+            const filtered = subjectId
+              ? data.filter((e) => e.subject_id === subjectId)
+              : data
+            setEnrollments(filtered)
+          } catch (adminErr) {
+            console.error('Error fetching enrollments as admin:', adminErr)
             setEnrollments([])
           }
         }
-      } else if (user?.role === 'Admin') {
-        // Para Admin, obtener todos los enrollments
-        const data = await enrollmentService.getAll()
-        // Filtrar por subject_id si está disponible
-        const filtered = subjectId
-          ? data.filter((e) => e.subject_id === subjectId)
-          : data
-        setEnrollments(filtered)
       } else {
         // Para otros roles, no se pueden obtener enrollments
         setEnrollments([])

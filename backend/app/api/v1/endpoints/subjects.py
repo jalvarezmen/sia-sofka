@@ -76,6 +76,52 @@ async def get_subjects(
         raise ForbiddenError("Not enough permissions")
 
 
+@router.get("/{subject_id}/enrollments")
+async def get_subject_enrollments(
+    subject_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """Get enrollments for a subject.
+    
+    - Profesor: can see enrollments of their assigned subjects
+    - Admin: can see enrollments of any subject
+    """
+    from app.models.user import UserRole
+    from app.services.profesor_service import ProfesorService
+    from app.core.exceptions import ForbiddenError, ValidationError
+    from app.repositories.enrollment_repository import EnrollmentRepository
+    from app.api.v1.serializers.enrollment_serializer import EnrollmentSerializer
+    
+    try:
+        if current_user.role == UserRole.PROFESOR:
+            # Profesor: verificar que la materia esté asignada
+            profesor_service = ProfesorService(db, current_user)
+            # Esto lanzará ValueError si la materia no está asignada
+            await profesor_service.get_students_by_subject(subject_id)
+            
+            # Obtener enrollments con relaciones
+            enrollment_repo = EnrollmentRepository(db)
+            enrollments = await enrollment_repo.get_many_with_relations(
+                subject_id=subject_id,
+                relations=['estudiante', 'subject']
+            )
+        elif current_user.role == UserRole.ADMIN:
+            # Admin: puede ver enrollments de cualquier materia
+            enrollment_repo = EnrollmentRepository(db)
+            enrollments = await enrollment_repo.get_many_with_relations(
+                subject_id=subject_id,
+                relations=['estudiante', 'subject']
+            )
+        else:
+            raise ForbiddenError("Not enough permissions")
+        
+        # Serialize enrollments
+        return await EnrollmentSerializer.serialize_batch(enrollments, db)
+    except ValueError as e:
+        raise ValidationError(str(e))
+
+
 @router.get("/{subject_id}/students")
 async def get_subject_students(
     subject_id: int,
