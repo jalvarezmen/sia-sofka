@@ -149,7 +149,7 @@ class EnrollmentRepository(AbstractRepository[Enrollment], EagerLoadMixin, Pagin
             limit: Maximum number of records to return
         
         Returns:
-            List of enrollments with loaded relationships
+            List of enrollments with loaded relationships, ordered by most recent first
         """
         skip, limit = self._validate_pagination(skip, limit)
         
@@ -169,14 +169,30 @@ class EnrollmentRepository(AbstractRepository[Enrollment], EagerLoadMixin, Pagin
         use_joined = [r for r in relations if r in ['estudiante', 'subject']]
         select_relations = [r for r in relations if r == 'grades']
         
-        return await self._get_many_with_relations(
-            Enrollment,
-            condition=condition,
-            relations=select_relations,
-            use_joined=use_joined,
-            skip=skip,
-            limit=limit
-        )
+        # Build query directly to ensure ordering happens BEFORE pagination
+        from sqlalchemy import select, desc
+        from sqlalchemy.orm import selectinload, joinedload
+        
+        stmt = select(Enrollment)
+        
+        if condition is not None:
+            stmt = stmt.where(condition)
+        
+        # Add eager loading options
+        if select_relations:
+            for relation in select_relations:
+                stmt = stmt.options(selectinload(getattr(Enrollment, relation)))
+        
+        if use_joined:
+            for relation in use_joined:
+                stmt = stmt.options(joinedload(getattr(Enrollment, relation)))
+        
+        # Order by id descending (most recent first) BEFORE pagination
+        stmt = stmt.order_by(desc(Enrollment.id))
+        stmt = stmt.offset(skip).limit(limit)
+        
+        result = await self.db.execute(stmt)
+        return list(result.scalars().all())
 
 
 

@@ -76,6 +76,50 @@ async def get_subjects(
         raise ForbiddenError("Not enough permissions")
 
 
+@router.get("/{subject_id}/students")
+async def get_subject_students(
+    subject_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """Get students enrolled in a subject.
+    
+    - Profesor: can see students of their assigned subjects
+    - Admin: can see students of any subject
+    """
+    from app.models.user import UserRole
+    from app.services.profesor_service import ProfesorService
+    from app.core.exceptions import ForbiddenError, ValidationError
+    from app.schemas.user import UserResponse
+    
+    try:
+        if current_user.role == UserRole.PROFESOR:
+            # Profesor: solo estudiantes de sus materias asignadas
+            profesor_service = ProfesorService(db, current_user)
+            students = await profesor_service.get_students_by_subject(subject_id)
+        elif current_user.role == UserRole.ADMIN:
+            # Admin: puede ver estudiantes de cualquier materia
+            from app.repositories.enrollment_repository import EnrollmentRepository
+            from app.services.user_service import UserService
+            
+            enrollment_repo = EnrollmentRepository(db)
+            user_service = UserService(db)
+            
+            enrollments = await enrollment_repo.get_by_subject(subject_id)
+            students = []
+            for enrollment in enrollments:
+                estudiante = await user_service.get_user_by_id(enrollment.estudiante_id)
+                if estudiante:
+                    students.append(estudiante)
+        else:
+            raise ForbiddenError("Not enough permissions")
+        
+        # Serialize students
+        return [UserResponse.model_validate(student) for student in students]
+    except ValueError as e:
+        raise ValidationError(str(e))
+
+
 @router.get("/{subject_id}", response_model=SubjectResponse)
 async def get_subject(
     subject_id: int,

@@ -210,30 +210,21 @@ export const profesorService = {
 
   /**
    * Obtiene los estudiantes inscritos en una materia
-   * Usa /grades?subject_id={id} para obtener las notas y extraer estudiantes únicos
+   * Usa /subjects/{subject_id}/students para obtener estudiantes desde inscripciones
    */
   getStudentsBySubject: async (subjectId) => {
     try {
-      // Obtener notas de la materia (requiere subject_id para profesor)
-      const grades = await gradeService.getAll({ subject_id: subjectId })
-      // Extraer estudiantes únicos
-      const students = []
-      const studentIds = new Set()
-      
-      for (const grade of grades) {
-        const estudiante = grade.enrollment?.estudiante
-        if (estudiante && !studentIds.has(estudiante.id)) {
-          studentIds.add(estudiante.id)
-          students.push(estudiante)
-        }
-      }
-      
-      return students
+      const response = await api.get(`/subjects/${subjectId}/students`)
+      return response.data || []
     } catch (error) {
       console.error('Error getting students by subject:', error)
       // Si falla, retornar array vacío en lugar de lanzar error
       if (error.response?.status === 403 || error.response?.status === 401) {
-        console.warn('No se tienen permisos para acceder a las notas de esta materia.')
+        console.warn('No se tienen permisos para acceder a los estudiantes de esta materia.')
+        return []
+      }
+      if (error.response?.status === 404 || error.response?.status === 400) {
+        console.warn('Materia no encontrada o no asignada.')
         return []
       }
       throw error

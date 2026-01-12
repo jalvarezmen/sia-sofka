@@ -21,15 +21,21 @@ const Enrollments = () => {
       setError('')
       const data = await enrollmentService.getAll()
       console.log('Enrollments data:', data) // Debug
-      console.log('First enrollment:', data[0]) // Debug - ver estructura del primer elemento
-      if (data[0]) {
+      console.log('Number of enrollments:', data?.length || 0) // Debug
+      console.log('First enrollment:', data?.[0]) // Debug - ver estructura del primer elemento
+      if (data?.[0]) {
         console.log('Estudiante:', data[0].estudiante) // Debug
         console.log('Subject:', data[0].subject) // Debug
       }
-      setEnrollments(data)
+      // Asegurar que data es un array
+      const enrollmentsArray = Array.isArray(data) ? data : []
+      setEnrollments(enrollmentsArray)
+      console.log('Enrollments set to state:', enrollmentsArray.length) // Debug
     } catch (err) {
       setError(err.message || 'Error al cargar inscripciones')
       console.error('Error fetching enrollments:', err)
+      console.error('Error details:', err.response?.data || err.message)
+      setEnrollments([]) // Asegurar que se establece un array vacío en caso de error
     } finally {
       setLoading(false)
     }
