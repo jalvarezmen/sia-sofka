@@ -42,7 +42,7 @@ async def create_enrollment(
         
         # Serialize single enrollment using serializer
         responses = await EnrollmentSerializer.serialize_batch([enrollment_with_relations], db)
-        return responses[0] if responses else None
+        return responses[0] if responses else None  # Helper pattern for single item serialization
     except ValueError as e:
         await db.rollback()
         if "already enrolled" in str(e).lower() or "duplicate" in str(e).lower():
@@ -93,7 +93,7 @@ async def get_enrollment(
     
     # Serialize single enrollment using serializer
     responses = await EnrollmentSerializer.serialize_batch([enrollment], db)
-    return responses[0] if responses else None
+    return responses[0] if responses else None  # Helper pattern for single item serialization
 
 
 @router.delete("/{enrollment_id}", status_code=status.HTTP_204_NO_CONTENT)

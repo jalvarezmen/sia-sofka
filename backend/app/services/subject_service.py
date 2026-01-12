@@ -21,6 +21,33 @@ class SubjectService:
         self.user_repository = UserRepository(db)
         self.db = db
     
+    def _validate_credits(self, credits: int) -> None:
+        """Validate number of credits.
+        
+        Args:
+            credits: Number of credits to validate
+        
+        Raises:
+            ValueError: If credits are invalid
+        """
+        if credits <= 0 or credits > 10:
+            raise ValueError("Number of credits must be between 1 and 10")
+    
+    async def _validate_profesor(self, profesor_id: int) -> None:
+        """Validate that profesor exists and is a Profesor.
+        
+        Args:
+            profesor_id: Profesor user ID
+        
+        Raises:
+            ValueError: If profesor not found or invalid
+        """
+        profesor = await self.user_repository.get_by_id(profesor_id)
+        if not profesor:
+            raise ValueError("Profesor not found")
+        if profesor.role != UserRole.PROFESOR:
+            raise ValueError("User is not a Profesor")
+    
     async def create_subject(self, subject_data: SubjectCreate) -> Subject:
         """Create a new subject with business logic.
         
@@ -33,17 +60,11 @@ class SubjectService:
         Raises:
             ValueError: If invalid data or profesor not found
         """
-        # Validate credits (0 < credits <= 10)
-        if subject_data.numero_creditos <= 0 or subject_data.numero_creditos > 10:
-            raise ValueError("Number of credits must be between 1 and 10")
+        # Validate credits
+        self._validate_credits(subject_data.numero_creditos)
         
-        # Verify profesor exists and is a Profesor
-        profesor = await self.user_repository.get_by_id(subject_data.profesor_id)
-        if not profesor:
-            raise ValueError("Profesor not found")
-        
-        if profesor.role != UserRole.PROFESOR:
-            raise ValueError("User is not a Profesor")
+        # Validate profesor
+        await self._validate_profesor(subject_data.profesor_id)
         
         # Generate codigo_institucional if not provided
         from app.utils.codigo_generator import generar_codigo_materia
@@ -89,14 +110,11 @@ class SubjectService:
         """
         # Validate credits if provided
         if subject_data.numero_creditos is not None:
-            if subject_data.numero_creditos <= 0 or subject_data.numero_creditos > 10:
-                raise ValueError("Number of credits must be between 1 and 10")
+            self._validate_credits(subject_data.numero_creditos)
         
-        # Verify profesor if provided
+        # Validate profesor if provided
         if subject_data.profesor_id is not None:
-            profesor = await self.user_repository.get_by_id(subject_data.profesor_id)
-            if not profesor or profesor.role != UserRole.PROFESOR:
-                raise ValueError("Profesor not found or invalid")
+            await self._validate_profesor(subject_data.profesor_id)
         
         update_dict = subject_data.model_dump(exclude_unset=True)
         return await self.repository.update(subject_id, update_dict)

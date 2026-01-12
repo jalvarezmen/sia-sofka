@@ -32,17 +32,19 @@ class EstudianteService:
         Returns:
             List of enrollments with subject information
         """
-        enrollments = await self.enrollment_repo.get_by_estudiante(
-            self.estudiante_user.id
+        # Get enrollments with eager-loaded subject relationships (batch query)
+        enrollments = await self.enrollment_repo.get_many_with_relations(
+            estudiante_id=self.estudiante_user.id,
+            relations=['subject']
         )
         
+        # Build result with already-loaded subjects
         result = []
         for enrollment in enrollments:
-            subject = await self.subject_repo.get_by_id(enrollment.subject_id)
-            if subject:
+            if hasattr(enrollment, 'subject') and enrollment.subject:
                 result.append({
                     "enrollment": enrollment,
-                    "subject": subject,
+                    "subject": enrollment.subject,
                 })
         
         return result
@@ -108,21 +110,15 @@ class EstudianteService:
             "average": float(average) if average else None,
         }
     
-    async def generate_general_report(self, format: str = "pdf") -> dict:
-        """Generate general report with all subjects and grades using Factory Method.
+    async def _build_general_report_data(self, enrollments) -> dict:
+        """Build report data structure for general report.
         
         Args:
-            format: Report format (pdf, html, json)
+            enrollments: List of enrollments with loaded subjects
         
         Returns:
-            Report with content, filename, and content_type
+            Dictionary with report data structure
         """
-        from app.factories import ReportFactory  # Import from __init__.py to ensure generators are registered
-        
-        enrollments = await self.enrollment_repo.get_by_estudiante(
-            self.estudiante_user.id
-        )
-        
         report_data = {
             "estudiante": {
                 "id": self.estudiante_user.id,
@@ -135,7 +131,8 @@ class EstudianteService:
         }
         
         for enrollment in enrollments:
-            subject = await self.subject_repo.get_by_id(enrollment.subject_id)
+            # Subject already loaded via eager loading
+            subject = getattr(enrollment, 'subject', None)
             if not subject:
                 continue
             
@@ -156,7 +153,14 @@ class EstudianteService:
                 "average": float(average) if average else None,
             })
         
-        # Calculate general average (weighted by credits)
+        return report_data
+    
+    def _calculate_weighted_average(self, report_data: dict) -> None:
+        """Calculate and add general weighted average to report data.
+        
+        Args:
+            report_data: Report data dictionary (modified in place)
+        """
         from decimal import Decimal
         total_weighted_sum = Decimal("0.0")
         total_credits = Decimal("0.0")
@@ -172,6 +176,29 @@ class EstudianteService:
             report_data["general_average"] = round(general_average, 2)
         else:
             report_data["general_average"] = None
+    
+    async def generate_general_report(self, format: str = "pdf") -> dict:
+        """Generate general report with all subjects and grades using Factory Method.
+        
+        Args:
+            format: Report format (pdf, html, json)
+        
+        Returns:
+            Report with content, filename, and content_type
+        """
+        from app.factories import ReportFactory  # Import from __init__.py to ensure generators are registered
+        
+        # Get enrollments with eager-loaded subject relationships (batch query)
+        enrollments = await self.enrollment_repo.get_many_with_relations(
+            estudiante_id=self.estudiante_user.id,
+            relations=['subject']
+        )
+        
+        # Build report data
+        report_data = await self._build_general_report_data(enrollments)
+        
+        # Calculate general average
+        self._calculate_weighted_average(report_data)
         
         # Use Factory Method to generate report
         generator = ReportFactory.create_generator(format)
