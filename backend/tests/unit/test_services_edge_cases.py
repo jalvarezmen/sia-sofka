@@ -885,7 +885,7 @@ async def test_subject_service_update_subject_invalid_profesor_not_found(db_sess
     
     # Try to update with non-existent profesor
     update_data = SubjectUpdate(profesor_id=99999)
-    with pytest.raises(ValueError, match="Profesor not found or invalid"):
+    with pytest.raises(ValueError, match="Profesor not found"):
         await service.update_subject(subject.id, update_data)
 
 
@@ -934,7 +934,7 @@ async def test_subject_service_update_subject_invalid_profesor_role(db_session: 
     
     # Try to update with estudiante (not profesor)
     update_data = SubjectUpdate(profesor_id=estudiante.id)
-    with pytest.raises(ValueError, match="Profesor not found or invalid"):
+    with pytest.raises(ValueError, match="User is not a Profesor"):
         await service.update_subject(subject.id, update_data)
 
 
