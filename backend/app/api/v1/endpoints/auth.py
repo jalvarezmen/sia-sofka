@@ -4,7 +4,6 @@ from datetime import timedelta
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
 from app.core.database import get_db
 from app.core.security import verify_password, create_access_token
 from app.core.config import settings
@@ -39,10 +38,9 @@ async def login(
     Raises:
         HTTPException: If credentials are invalid
     """
-    # Find user by email (username in OAuth2 form)
-    stmt = select(User).where(User.email == form_data.username)
-    result = await db.execute(stmt)
-    user = result.scalar_one_or_none()
+    # Find user by email using service (username in OAuth2 form)
+    user_service = UserService(db)
+    user = await user_service.get_user_by_email(form_data.username)
     
     if not user or not verify_password(form_data.password, user.password_hash):
         raise HTTPException(

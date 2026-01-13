@@ -181,28 +181,16 @@ class AdminService:
         return await self.grade_service.calculate_average(enrollment.id)
     
     # Report Generation using Factory Method
-    async def generate_student_report(
-        self, estudiante_id: int, format: str = "json"
-    ) -> dict:
-        """Generate report for a student using Factory Method.
+    async def _build_student_report_data(self, estudiante, enrollments) -> dict:
+        """Build report data structure for a student.
         
         Args:
-            estudiante_id: Estudiante user ID
-            format: Report format (pdf, html, json)
+            estudiante: Estudiante user instance
+            enrollments: List of enrollments with loaded subjects
         
         Returns:
-            Report with content, filename, and content_type
+            Dictionary with report data structure
         """
-        from app.factories import ReportFactory  # Import from __init__.py to ensure generators are registered
-        from app.repositories.subject_repository import SubjectRepository
-        
-        estudiante = await self.user_service.get_user_by_id(estudiante_id)
-        if not estudiante:
-            raise ValueError("Estudiante not found")
-        
-        enrollments = await self.enrollment_repo.get_by_estudiante(estudiante_id)
-        subject_repo = SubjectRepository(self.db)
-        
         report_data = {
             "estudiante": {
                 "id": estudiante.id,
@@ -214,9 +202,10 @@ class AdminService:
             "subjects": [],
         }
         
-        # Add enrollment and grade data
+        # Add enrollment and grade data (subjects already loaded via eager loading)
         for enrollment in enrollments:
-            subject = await subject_repo.get_by_id(enrollment.subject_id)
+            # Subject already loaded via eager loading
+            subject = getattr(enrollment, 'subject', None)
             if not subject:
                 continue
             
@@ -237,7 +226,14 @@ class AdminService:
                 "average": float(average) if average else None,
             })
         
-        # Calculate general average (weighted by credits)
+        return report_data
+    
+    def _calculate_general_average(self, report_data: dict) -> None:
+        """Calculate and add general weighted average to report data.
+        
+        Args:
+            report_data: Report data dictionary (modified in place)
+        """
         total_weighted_sum = Decimal("0.0")
         total_credits = Decimal("0.0")
         for subject_info in report_data["subjects"]:
@@ -252,6 +248,36 @@ class AdminService:
             report_data["general_average"] = round(general_average, 2)
         else:
             report_data["general_average"] = None
+    
+    async def generate_student_report(
+        self, estudiante_id: int, format: str = "json"
+    ) -> dict:
+        """Generate report for a student using Factory Method.
+        
+        Args:
+            estudiante_id: Estudiante user ID
+            format: Report format (pdf, html, json)
+        
+        Returns:
+            Report with content, filename, and content_type
+        """
+        from app.factories import ReportFactory  # Import from __init__.py to ensure generators are registered
+        
+        estudiante = await self.user_service.get_user_by_id(estudiante_id)
+        if not estudiante:
+            raise ValueError("Estudiante not found")
+        
+        # Get enrollments with eager-loaded subject relationships (batch query)
+        enrollments = await self.enrollment_repo.get_many_with_relations(
+            estudiante_id=estudiante_id,
+            relations=['subject']
+        )
+        
+        # Build report data
+        report_data = await self._build_student_report_data(estudiante, enrollments)
+        
+        # Calculate general average
+        self._calculate_general_average(report_data)
         
         # Use Factory Method to generate report
         generator = ReportFactory.create_generator(format)

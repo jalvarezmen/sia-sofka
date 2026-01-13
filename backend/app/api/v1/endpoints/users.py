@@ -23,13 +23,17 @@ async def create_user(
     """Create a new user (Admin only)."""
     admin_service = AdminService(db, current_user)
     
+    # Map role to creation method
+    role_creators = {
+        UserRole.ESTUDIANTE: admin_service.create_estudiante,
+        UserRole.PROFESOR: admin_service.create_profesor,
+    }
+    
     try:
-        if user_data.role == UserRole.ESTUDIANTE:
-            user = await admin_service.create_estudiante(user_data)
-        elif user_data.role == UserRole.PROFESOR:
-            user = await admin_service.create_profesor(user_data)
-        else:
+        creator = role_creators.get(user_data.role)
+        if not creator:
             raise ValidationError("Invalid role for user creation")
+        user = await creator(user_data)
         return user
     except ValueError as e:
         raise ValidationError(str(e))

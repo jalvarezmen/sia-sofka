@@ -62,52 +62,50 @@ async def create_grade(
             raise NotFoundError("Grade", str(e))
 
 
-async def _get_grades_as_estudiante(
-    db: AsyncSession, current_user: User, subject_id: int
+async def _get_grades_with_filters(
+    db: AsyncSession,
+    current_user: Optional[User] = None,
+    subject_id: Optional[int] = None,
+    enrollment_id: Optional[int] = None,
+    is_estudiante: bool = False,
+    is_profesor: bool = False,
 ) -> List[GradeResponse]:
-    """Get grades for an estudiante."""
-    estudiante_service = EstudianteService(db, current_user)
-    grades = await estudiante_service.get_grades_by_subject(subject_id)
+    """Get grades with filters based on user role.
     
-    # Load grades with enrollment relationships using repository
-    grade_repo = GradeRepository(db)
-    grade_ids = [grade.id for grade in grades]
-    grades_with_enrollment = await grade_repo.get_many_with_relations(
-        grade_ids=grade_ids,
-        relations=['enrollment']
-    )
-    # Serialize grades using serializer
-    return await GradeSerializer.serialize_batch(grades_with_enrollment, db)
-
-
-async def _get_grades_as_profesor(
-    db: AsyncSession, current_user: User, subject_id: int, enrollment_id: Optional[int]
-) -> List[GradeResponse]:
-    """Get grades for a profesor."""
-    await GradeValidator.verify_profesor_can_access_subject(db, current_user, subject_id)
+    Args:
+        db: Database session
+        current_user: Current user (required for estudiante/profesor)
+        subject_id: Optional subject ID filter
+        enrollment_id: Optional enrollment ID filter
+        is_estudiante: If True, get grades for estudiante
+        is_profesor: If True, verify profesor permissions
     
-    # Use repository to load grades with relations
+    Returns:
+        List of grade responses
+    """
     grade_repo = GradeRepository(db)
+    
+    if is_estudiante and current_user:
+        # Estudiante: get grades through service first
+        estudiante_service = EstudianteService(db, current_user)
+        grades = await estudiante_service.get_grades_by_subject(subject_id)
+        grade_ids = [grade.id for grade in grades]
+        grades_with_enrollment = await grade_repo.get_many_with_relations(
+            grade_ids=grade_ids,
+            relations=['enrollment']
+        )
+        return await GradeSerializer.serialize_batch(grades_with_enrollment, db)
+    
+    if is_profesor and current_user:
+        # Profesor: verify access first
+        await GradeValidator.verify_profesor_can_access_subject(db, current_user, subject_id)
+    
+    # Admin or Profesor: use repository directly
     grades = await grade_repo.get_many_with_relations(
         enrollment_id=enrollment_id,
         subject_id=subject_id,
         relations=['enrollment']
     )
-    # Serialize grades using serializer
-    return await GradeSerializer.serialize_batch(grades, db)
-
-
-async def _get_grades_as_admin(
-    db: AsyncSession, subject_id: Optional[int], enrollment_id: Optional[int]
-) -> List[GradeResponse]:
-    """Get grades for an admin."""
-    grade_repo = GradeRepository(db)
-    grades = await grade_repo.get_many_with_relations(
-        enrollment_id=enrollment_id,
-        subject_id=subject_id,
-        relations=['enrollment']
-    )
-    # Serialize grades using serializer
     return await GradeSerializer.serialize_batch(grades, db)
 
 
@@ -128,17 +126,21 @@ async def get_grades(
         if not subject_id:
             raise ForbiddenError("Subject ID is required for estudiantes")
         try:
-            return await _get_grades_as_estudiante(db, current_user, subject_id)
+            return await _get_grades_with_filters(
+                db, current_user, subject_id, enrollment_id, is_estudiante=True
+            )
         except ValueError as e:
             raise ForbiddenError(str(e))
     
     elif current_user.role == UserRole.PROFESOR:
         if not subject_id:
             raise ForbiddenError("Subject ID is required for profesores")
-        return await _get_grades_as_profesor(db, current_user, subject_id, enrollment_id)
+        return await _get_grades_with_filters(
+            db, current_user, subject_id, enrollment_id, is_profesor=True
+        )
     
     else:  # Admin
-        return await _get_grades_as_admin(db, subject_id, enrollment_id)
+        return await _get_grades_with_filters(db, None, subject_id, enrollment_id)
 
 
 @router.get("/{grade_id}", response_model=GradeResponse)

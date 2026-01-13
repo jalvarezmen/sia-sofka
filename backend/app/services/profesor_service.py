@@ -56,15 +56,17 @@ class ProfesorService:
         if not subject or subject.profesor_id != self.profesor_user.id:
             raise ValueError("Subject is not assigned to this profesor")
         
-        # Get enrollments for this subject
-        enrollments = await self.enrollment_repo.get_by_subject(subject_id)
+        # Get enrollments with eager-loaded estudiante relationships (batch query)
+        enrollments = await self.enrollment_repo.get_many_with_relations(
+            subject_id=subject_id,
+            relations=['estudiante']
+        )
         
-        # Get estudiantes
+        # Extract estudiantes from enrollments (already loaded)
         estudiantes = []
         for enrollment in enrollments:
-            estudiante = await self.user_service.get_user_by_id(enrollment.estudiante_id)
-            if estudiante:
-                estudiantes.append(estudiante)
+            if hasattr(enrollment, 'estudiante') and enrollment.estudiante:
+                estudiantes.append(enrollment.estudiante)
         
         return estudiantes
     
@@ -119,28 +121,16 @@ class ProfesorService:
             "students": students,
         }
     
-    async def generate_subject_report(
-        self, subject_id: int, format: str = "pdf"
-    ) -> dict:
-        """Generate report of grades for a subject using Factory Method.
+    async def _build_subject_report_data(self, subject, enrollments) -> dict:
+        """Build report data structure for a subject.
         
         Args:
-            subject_id: Subject ID
-            format: Report format (pdf, html, json)
+            subject: Subject instance
+            enrollments: List of enrollments with loaded estudiantes
         
         Returns:
-            Report with content, filename, and content_type
+            Dictionary with report data structure
         """
-        from app.factories import ReportFactory  # Import from __init__.py to ensure generators are registered
-        
-        # Verify subject is assigned
-        subject = await self.subject_repo.get_by_id(subject_id)
-        if not subject or subject.profesor_id != self.profesor_user.id:
-            raise ValueError("Subject is not assigned to this profesor")
-        
-        # Get enrollments and grades
-        enrollments = await self.enrollment_repo.get_by_subject(subject_id)
-        
         report_data = {
             "subject": {
                 "id": subject.id,
@@ -151,7 +141,8 @@ class ProfesorService:
         }
         
         for enrollment in enrollments:
-            estudiante = await self.user_service.get_user_by_id(enrollment.estudiante_id)
+            # Estudiante already loaded via eager loading
+            estudiante = getattr(enrollment, 'estudiante', None)
             if not estudiante:
                 continue
             
@@ -171,6 +162,36 @@ class ProfesorService:
                 "grades": [{"nota": float(g.nota), "periodo": g.periodo, "fecha": str(g.fecha)} for g in grades],
                 "average": float(average) if average else None,
             })
+        
+        return report_data
+    
+    async def generate_subject_report(
+        self, subject_id: int, format: str = "pdf"
+    ) -> dict:
+        """Generate report of grades for a subject using Factory Method.
+        
+        Args:
+            subject_id: Subject ID
+            format: Report format (pdf, html, json)
+        
+        Returns:
+            Report with content, filename, and content_type
+        """
+        from app.factories import ReportFactory  # Import from __init__.py to ensure generators are registered
+        
+        # Verify subject is assigned
+        subject = await self.subject_repo.get_by_id(subject_id)
+        if not subject or subject.profesor_id != self.profesor_user.id:
+            raise ValueError("Subject is not assigned to this profesor")
+        
+        # Get enrollments with eager-loaded estudiante relationships (batch query)
+        enrollments = await self.enrollment_repo.get_many_with_relations(
+            subject_id=subject_id,
+            relations=['estudiante']
+        )
+        
+        # Build report data
+        report_data = await self._build_subject_report_data(subject, enrollments)
         
         # Use Factory Method to generate report
         generator = ReportFactory.create_generator(format)

@@ -3,20 +3,116 @@
 from typing import List
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 from app.core.database import get_db
-from app.core.exceptions import NotFoundError, ValidationError
-from app.models.user import User
+from app.core.exceptions import NotFoundError, ValidationError, ForbiddenError
+from app.models.user import User, UserRole
 from app.models.subject import Subject
 from app.schemas.subject import SubjectCreate, SubjectUpdate, SubjectResponse
+from app.schemas.user import UserResponse
 from app.services.admin_service import AdminService
 from app.services.subject_service import SubjectService
+from app.services.profesor_service import ProfesorService
+from app.services.user_service import UserService
+from app.repositories.subject_repository import SubjectRepository
+from app.repositories.enrollment_repository import EnrollmentRepository
 from app.api.v1.dependencies import require_admin, get_current_active_user
 from app.api.v1.serializers.subject_serializer import SubjectSerializer
+from app.api.v1.serializers.enrollment_serializer import EnrollmentSerializer
 
 router = APIRouter()
 
+
+# ==================== Helper Functions ====================
+
+async def _get_subjects_for_profesor(
+    db: AsyncSession, current_user: User
+) -> List[SubjectResponse]:
+    """Get subjects for profesor role."""
+    profesor_service = ProfesorService(db, current_user)
+    subjects = await profesor_service.get_assigned_subjects()
+    
+    # Si hay subjects, cargar relación profesor con eager loading
+    if subjects:
+        subject_ids = [s.id for s in subjects]
+        stmt = (
+            select(Subject)
+            .where(Subject.id.in_(subject_ids))
+            .options(selectinload(Subject.profesor))
+        )
+        result = await db.execute(stmt)
+        subjects = list(result.scalars().all())
+    
+    return SubjectSerializer.serialize_batch(subjects)
+
+
+async def _get_subjects_for_admin(
+    db: AsyncSession, skip: int, limit: int
+) -> List[SubjectResponse]:
+    """Get subjects for admin role."""
+    # Usar eager loading para cargar relación profesor directamente
+    stmt = (
+        select(Subject)
+        .options(selectinload(Subject.profesor))
+        .offset(skip)
+        .limit(limit)
+    )
+    result = await db.execute(stmt)
+    subjects = list(result.scalars().all())
+    
+    return SubjectSerializer.serialize_batch(subjects)
+
+
+async def _get_enrollments_for_role(
+    db: AsyncSession,
+    current_user: User,
+    subject_id: int,
+    is_profesor: bool
+) -> List:
+    """Get enrollments for a subject based on user role."""
+    enrollment_repo = EnrollmentRepository(db)
+    
+    if is_profesor:
+        # Profesor: verificar que la materia esté asignada
+        profesor_service = ProfesorService(db, current_user)
+        await profesor_service.get_students_by_subject(subject_id)
+    
+    enrollments = await enrollment_repo.get_many_with_relations(
+        subject_id=subject_id,
+        relations=['estudiante', 'subject']
+    )
+    return await EnrollmentSerializer.serialize_batch(enrollments, db)
+
+
+async def _get_students_for_role(
+    db: AsyncSession,
+    current_user: User,
+    subject_id: int,
+    is_profesor: bool
+) -> List[UserResponse]:
+    """Get students for a subject based on user role."""
+    if is_profesor:
+        profesor_service = ProfesorService(db, current_user)
+        students = await profesor_service.get_students_by_subject(subject_id)
+    else:
+        # Admin: obtener estudiantes usando eager loading (evita N+1 queries)
+        enrollment_repo = EnrollmentRepository(db)
+        enrollments = await enrollment_repo.get_many_with_relations(
+            subject_id=subject_id,
+            relations=['estudiante']  # Eager load estudiantes
+        )
+        # Extraer estudiantes de enrollments (ya cargados)
+        students = [
+            enrollment.estudiante 
+            for enrollment in enrollments 
+            if hasattr(enrollment, 'estudiante') and enrollment.estudiante
+        ]
+    
+    return [UserResponse.model_validate(student) for student in students]
+
+
+# ==================== Endpoints ====================
 
 @router.post("", response_model=SubjectResponse, status_code=status.HTTP_201_CREATED)
 async def create_subject(
@@ -29,8 +125,24 @@ async def create_subject(
     
     try:
         subject = await admin_service.create_subject(subject_data)
-        return subject
+        # El repositorio ya hace commit, solo necesitamos cargar la relación profesor
+        # Usar eager loading en lugar de refresh manual
+        stmt = (
+            select(Subject)
+            .where(Subject.id == subject.id)
+            .options(selectinload(Subject.profesor))
+        )
+        result = await db.execute(stmt)
+        subject_with_profesor = result.scalar_one_or_none()
+        
+        if not subject_with_profesor:
+            raise NotFoundError("Subject", subject.id)
+        
+        # Serialize using SubjectSerializer
+        serialized = SubjectSerializer.serialize_batch([subject_with_profesor])
+        return serialized[0] if serialized else None
     except ValueError as e:
+        await db.rollback()
         raise ValidationError(str(e))
 
 
@@ -46,33 +158,11 @@ async def get_subjects(
     - Admin: can see all subjects
     - Profesor: can see only their assigned subjects
     """
-    from app.models.user import UserRole
-    from app.services.profesor_service import ProfesorService
-    from app.core.exceptions import ForbiddenError
-    
     if current_user.role == UserRole.PROFESOR:
-        # Profesor: solo sus materias asignadas
-        profesor_service = ProfesorService(db, current_user)
-        subjects = await profesor_service.get_assigned_subjects()
-        # Cargar relación profesor si es necesario
-        for subject in subjects:
-            await db.refresh(subject, ["profesor"])
-        return SubjectSerializer.serialize_batch(subjects)
-    
+        return await _get_subjects_for_profesor(db, current_user)
     elif current_user.role == UserRole.ADMIN:
-        # Admin: todas las materias (comportamiento actual)
-        stmt = (
-            select(Subject)
-            .options(selectinload(Subject.profesor))
-            .offset(skip)
-            .limit(limit)
-        )
-        result = await db.execute(stmt)
-        subjects = result.scalars().all()
-        return SubjectSerializer.serialize_batch(subjects)
-    
+        return await _get_subjects_for_admin(db, skip, limit)
     else:
-        # Estudiante u otro rol: no permitido
         raise ForbiddenError("Not enough permissions")
 
 
@@ -87,37 +177,13 @@ async def get_subject_enrollments(
     - Profesor: can see enrollments of their assigned subjects
     - Admin: can see enrollments of any subject
     """
-    from app.models.user import UserRole
-    from app.services.profesor_service import ProfesorService
-    from app.core.exceptions import ForbiddenError, ValidationError
-    from app.repositories.enrollment_repository import EnrollmentRepository
-    from app.api.v1.serializers.enrollment_serializer import EnrollmentSerializer
-    
     try:
         if current_user.role == UserRole.PROFESOR:
-            # Profesor: verificar que la materia esté asignada
-            profesor_service = ProfesorService(db, current_user)
-            # Esto lanzará ValueError si la materia no está asignada
-            await profesor_service.get_students_by_subject(subject_id)
-            
-            # Obtener enrollments con relaciones
-            enrollment_repo = EnrollmentRepository(db)
-            enrollments = await enrollment_repo.get_many_with_relations(
-                subject_id=subject_id,
-                relations=['estudiante', 'subject']
-            )
+            return await _get_enrollments_for_role(db, current_user, subject_id, is_profesor=True)
         elif current_user.role == UserRole.ADMIN:
-            # Admin: puede ver enrollments de cualquier materia
-            enrollment_repo = EnrollmentRepository(db)
-            enrollments = await enrollment_repo.get_many_with_relations(
-                subject_id=subject_id,
-                relations=['estudiante', 'subject']
-            )
+            return await _get_enrollments_for_role(db, current_user, subject_id, is_profesor=False)
         else:
             raise ForbiddenError("Not enough permissions")
-        
-        # Serialize enrollments
-        return await EnrollmentSerializer.serialize_batch(enrollments, db)
     except ValueError as e:
         raise ValidationError(str(e))
 
@@ -133,35 +199,13 @@ async def get_subject_students(
     - Profesor: can see students of their assigned subjects
     - Admin: can see students of any subject
     """
-    from app.models.user import UserRole
-    from app.services.profesor_service import ProfesorService
-    from app.core.exceptions import ForbiddenError, ValidationError
-    from app.schemas.user import UserResponse
-    
     try:
         if current_user.role == UserRole.PROFESOR:
-            # Profesor: solo estudiantes de sus materias asignadas
-            profesor_service = ProfesorService(db, current_user)
-            students = await profesor_service.get_students_by_subject(subject_id)
+            return await _get_students_for_role(db, current_user, subject_id, is_profesor=True)
         elif current_user.role == UserRole.ADMIN:
-            # Admin: puede ver estudiantes de cualquier materia
-            from app.repositories.enrollment_repository import EnrollmentRepository
-            from app.services.user_service import UserService
-            
-            enrollment_repo = EnrollmentRepository(db)
-            user_service = UserService(db)
-            
-            enrollments = await enrollment_repo.get_by_subject(subject_id)
-            students = []
-            for enrollment in enrollments:
-                estudiante = await user_service.get_user_by_id(enrollment.estudiante_id)
-                if estudiante:
-                    students.append(estudiante)
+            return await _get_students_for_role(db, current_user, subject_id, is_profesor=False)
         else:
             raise ForbiddenError("Not enough permissions")
-        
-        # Serialize students
-        return [UserResponse.model_validate(student) for student in students]
     except ValueError as e:
         raise ValidationError(str(e))
 
