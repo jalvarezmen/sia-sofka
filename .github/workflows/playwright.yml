@@ -1,0 +1,109 @@
+name: Playwright E2E Tests
+
+# ⚠️ PIPELINE SUSPENDIDO TEMPORALMENTE - Las pruebas E2E no están completamente funcionales
+# Para reactivar, descomentar el bloque 'on:' y comentar 'workflow_dispatch'
+
+on:
+  # push:
+  #   branches: [main, develop]
+  # pull_request:
+  #   branches: [main, develop]
+  workflow_dispatch:  # Solo ejecución manual si es necesario
+
+jobs:
+  test:
+    timeout-minutes: 60
+    runs-on: ubuntu-latest
+    
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_DB: sia_sofka_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '18'
+        cache: 'npm'
+        cache-dependency-path: frontend/package-lock.json
+
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        cache: 'pip'
+
+    - name: Install backend dependencies
+      run: |
+        cd backend
+        pip install -r requirements.txt
+
+    - name: Run database migrations
+      env:
+        DATABASE_URL: postgresql://postgres:postgres@localhost:5432/sia_sofka_test
+      run: |
+        cd backend
+        alembic upgrade head
+
+    - name: Start backend server
+      env:
+        DATABASE_URL: postgresql://postgres:postgres@localhost:5432/sia_sofka_test
+        SECRET_KEY: test-secret-key-for-ci
+      run: |
+        cd backend
+        uvicorn app.main:app --host 0.0.0.0 --port 8000 &
+        sleep 10
+
+    - name: Install frontend dependencies
+      run: |
+        cd frontend
+        npm ci
+
+    - name: Install Playwright Browsers
+      run: |
+        cd frontend
+        npx playwright install --with-deps chromium
+
+    - name: Start frontend dev server
+      run: |
+        cd frontend
+        npm run dev &
+        npx wait-on http://localhost:5173
+
+    - name: Run Playwright tests
+      env:
+        BASE_URL: http://localhost:5173
+        API_URL: http://localhost:8000
+      run: |
+        cd frontend
+        npm run test:e2e -- --project=chromium
+
+    - name: Upload test results
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: playwright-report
+        path: frontend/playwright-report/
+        retention-days: 30
+
+    - name: Upload test videos
+      uses: actions/upload-artifact@v3
+      if: failure()
+      with:
+        name: playwright-videos
+        path: frontend/test-results/
+        retention-days: 7
